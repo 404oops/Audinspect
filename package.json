@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "NODE_ENV=development concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "vite build",
-    "package": "npm run build && electron-builder"
+    "package": "npm run build && electron-builder -mwl"
   },
   "keywords": [],
   "author": "",
@@ -16,10 +16,33 @@
     "appId": "com.404oops.audinspect",
     "asar": true,
     "files": [
-      "dist/**",
-      "electron/**",
+      "dist/*.html",
+      "dist/assets/*",
+      "electron/*",
       "package.json"
-    ]
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
+    }
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.1.1",
