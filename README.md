@@ -2,10 +2,6 @@
 
 An audio inspector. Made for quick viewing of audio files. Built with Electron + React and wavesurfer.js
 
-**YOU MUST HAVE FFMPEG INSTALLED IN CASE SOME AUDIO FILES DON'T WORK.**
-
-**I AM NOT RESPONSIBLE FOR ERRORS CAUSED BY NOT HAVING FFMPEG INSTALLED.**
-
 ## Features
 
 - Scrollwheel scrubbing

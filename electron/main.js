@@ -141,17 +141,33 @@ ipcMain.handle('file:read', async (_event, filePath) => {
 });
 
 // Use ffmpeg to transcode arbitrary audio files to WAV (streamed to stdout)
-// Returns a Buffer containing WAV data. Requires ffmpeg to be installed on the system.
+// Returns a Buffer containing WAV data. Uses ffmpeg-static for reliability.
 ipcMain.handle('file:decodeToWav', async (_event, filePath) => {
   if (!filePath) return null;
+  // Lazy load ffmpeg-static to avoid issues if not needed immediately
+  // and to ensure it's available in the packaged app context if handled correctly
+  let ffmpegPath;
+  try {
+    ffmpegPath = require('ffmpeg-static');
+    // In production, ffmpeg-static might point to a path in app.asar.unpacked
+    // or similar. We trust the package to provide the correct path.
+    if (!ffmpegPath) throw new Error('ffmpeg-static returned null path');
+  } catch (e) {
+    console.error('Failed to resolve ffmpeg-static path:', e);
+    return { data: null, error: `Failed to resolve ffmpeg path: ${e.message}`, code: null };
+  }
+
   return new Promise((resolve) => {
     try {
       const args = ['-i', filePath, '-f', 'wav', '-'];
-      const ff = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      console.log(`Spawning ffmpeg: ${ffmpegPath} ${args.join(' ')}`);
+
+      const ff = spawn(ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
       const chunks = [];
       ff.stdout.on('data', (c) => chunks.push(c));
       let errBuf = '';
       ff.stderr.on('data', (d) => { errBuf += d.toString(); });
+
       ff.on('close', (code) => {
         if (code === 0) {
           const out = Buffer.concat(chunks);
@@ -161,6 +177,7 @@ ipcMain.handle('file:decodeToWav', async (_event, filePath) => {
           resolve({ data: null, error: `ffmpeg failed (code ${code}): ${errBuf}`, code });
         }
       });
+
       ff.on('error', (e) => {
         console.error('ffmpeg spawn error:', e);
         resolve({ data: null, error: `ffmpeg spawn error: ${e.message}`, code: null });
@@ -180,15 +197,15 @@ app.whenReady().then(() => {
     // App menu (macOS)
     ...(process.platform === 'darwin'
       ? [
-          {
-            label: app.name,
-            submenu: [
-              { role: 'about' },
-              { type: 'separator' },
-              { role: 'quit' },
-            ],
-          },
-        ]
+        {
+          label: app.name,
+          submenu: [
+            { role: 'about' },
+            { type: 'separator' },
+            { role: 'quit' },
+          ],
+        },
+      ]
       : []),
     {
       label: 'File',

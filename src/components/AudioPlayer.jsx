@@ -60,18 +60,18 @@ export default function AudioPlayer() {
       try {
         setTime(inst.getCurrentTime());
         setIsPlaying(inst.isPlaying());
-      } catch (e) {}
+      } catch (e) { }
     });
     inst.on("finish", () => setIsPlaying(false));
     inst.on("seek", () => {
       try {
         setTime(inst.getCurrentTime());
-      } catch (e) {}
+      } catch (e) { }
     });
     // apply current volume to new instance
     try {
       inst.setVolume && inst.setVolume(volume / 100);
-    } catch (e) {}
+    } catch (e) { }
     wsRef.current = inst;
     return inst;
   };
@@ -81,7 +81,7 @@ export default function AudioPlayer() {
     if (wsRef.current && typeof wsRef.current.setVolume === "function") {
       try {
         wsRef.current.setVolume(volume / 100);
-      } catch (e) {}
+      } catch (e) { }
     }
   }, [volume]);
   useEffect(() => {
@@ -136,14 +136,14 @@ export default function AudioPlayer() {
       ) {
         try {
           currentLoadRef.current.cleanup();
-        } catch (e) {}
+        } catch (e) { }
         currentLoadRef.current.cleanup = null;
         currentLoadRef.current.url = null;
       }
       if (wsRef.current) {
         try {
           wsRef.current.destroy();
-        } catch (e) {}
+        } catch (e) { }
         wsRef.current = null;
       }
     };
@@ -184,7 +184,7 @@ export default function AudioPlayer() {
         if (wsRef.current) {
           try {
             wsRef.current.pause && wsRef.current.pause();
-          } catch (e) {}
+          } catch (e) { }
         }
         setCurrentIndex(-1);
         setIsPlaying(false);
@@ -212,10 +212,10 @@ export default function AudioPlayer() {
       if (wsRef.current) {
         try {
           wsRef.current.pause && wsRef.current.pause();
-        } catch (e) {}
+        } catch (e) { }
         try {
           wsRef.current.destroy();
-        } catch (e) {}
+        } catch (e) { }
         wsRef.current = null;
       }
 
@@ -225,7 +225,7 @@ export default function AudioPlayer() {
       ) {
         try {
           currentLoadRef.current.cleanup();
-        } catch (e) {}
+        } catch (e) { }
         currentLoadRef.current.cleanup = null;
         currentLoadRef.current.url = null;
       }
@@ -256,7 +256,7 @@ export default function AudioPlayer() {
     ) {
       try {
         currentLoadRef.current.cleanup();
-      } catch (e) {}
+      } catch (e) { }
       currentLoadRef.current.cleanup = null;
       currentLoadRef.current.url = null;
     }
@@ -267,11 +267,11 @@ export default function AudioPlayer() {
     if (wsRef.current) {
       try {
         wsRef.current.pause && wsRef.current.pause();
-      } catch (e) {}
+      } catch (e) { }
       try {
         // Clear any previously loaded buffer/peaks so new load is fresh
         wsRef.current.empty && wsRef.current.empty();
-      } catch (e) {}
+      } catch (e) { }
     } else {
       // If for some reason the instance was cleared, create a new one
       createWaveSurfer();
@@ -312,12 +312,12 @@ export default function AudioPlayer() {
           try {
             if (wsNow.seekTo) wsNow.seekTo(0);
             else if (wsNow.setCurrentTime) wsNow.setCurrentTime(0);
-          } catch (e) {}
+          } catch (e) { }
           setTime(0);
           if (currentLoadRef.current && currentLoadRef.current.url) {
             try {
               URL.revokeObjectURL(currentLoadRef.current.url);
-            } catch (e) {}
+            } catch (e) { }
             currentLoadRef.current.url = null;
           }
           setIsPlaying(false);
@@ -331,11 +331,11 @@ export default function AudioPlayer() {
                 ? wsRef.current.un("ready", handleReady)
                 : wsRef.current.off && wsRef.current.off("ready", handleReady);
             }
-          } catch (e) {}
+          } catch (e) { }
           if (currentLoadRef.current && currentLoadRef.current.url) {
             try {
               URL.revokeObjectURL(currentLoadRef.current.url);
-            } catch (e) {}
+            } catch (e) { }
             currentLoadRef.current.url = null;
           }
         };
@@ -346,7 +346,7 @@ export default function AudioPlayer() {
         const handleError = (err) => {
           try {
             onError && onError(err);
-          } catch (e) {}
+          } catch (e) { }
         };
         currentLoadRef.current.errorCleanup = () => {
           try {
@@ -355,7 +355,7 @@ export default function AudioPlayer() {
                 ? wsRef.current.un("error", handleError)
                 : wsRef.current.off && wsRef.current.off("error", handleError);
             }
-          } catch (e) {}
+          } catch (e) { }
         };
         wsRef.current.once && wsRef.current.once("error", handleError);
       };
@@ -395,37 +395,91 @@ export default function AudioPlayer() {
         }
       };
 
-      const doFfmpegFallback = async () => {
+      const loadAudioData = async (buffer, isFallback = false) => {
         try {
+          if (wsRef.current.loadArrayBuffer) {
+            attachReadyHandler();
+            await wsRef.current.loadArrayBuffer(buffer);
+            return true;
+          }
+          const blob = new Blob([buffer]);
+          if (wsRef.current.loadBlob) {
+            attachReadyHandler();
+            await wsRef.current.loadBlob(blob);
+            return true;
+          }
+          const url = URL.createObjectURL(blob);
+          currentLoadRef.current.url = url;
+          attachReadyHandler();
+          console.log("Loading audio from URL:", url);
+          await wsRef.current.load(url);
+
+          // Double check duration to ensure it actually loaded
+          if (wsRef.current.getDuration() === 0) {
+            throw new Error("File loaded but duration is 0");
+          }
+
+          return true;
+        } catch (e) {
+          console.error(`WaveSurfer load error (${isFallback ? 'fallback attempt' : 'initial attempt'}), will try fallback:`, e);
+          return false;
+        }
+      };
+
+      let fallbackAttempted = false;
+      const doFfmpegFallback = async () => {
+        if (fallbackAttempted) return;
+        fallbackAttempted = true;
+
+        try {
+          console.log("Attempting ffmpeg fallback for:", filePath);
           const decoded = await window.electronAPI.decodeToWav(filePath);
           if (myToken !== loadTokenRef.current) return;
           if (decoded && decoded.data) {
+            console.log("ffmpeg fallback successful, loading data...");
             const decodedArrayBuffer = toArrayBuffer(decoded.data);
-            if (wsRef.current.loadArrayBuffer) {
-              attachReadyHandler();
-              await wsRef.current.loadArrayBuffer(decodedArrayBuffer);
-            } else if (wsRef.current.loadBlob) {
-              const blob = new Blob([decodedArrayBuffer]);
-              attachReadyHandler();
-              await wsRef.current.loadBlob(blob);
-            } else {
-              const blob = new Blob([decodedArrayBuffer]);
-              const url = URL.createObjectURL(blob);
-              currentLoadRef.current.url = url;
-              attachReadyHandler();
-              wsRef.current.load(url);
-            }
+            await loadAudioData(decodedArrayBuffer, true);
           } else {
-            console.error("ffmpeg decode returned no data or error:", decoded && decoded.error);
+            const errorMsg = decoded && decoded.error ? decoded.error : "Unknown error";
+            console.error("ffmpeg decode returned no data or error:", errorMsg);
+            alert(`Failed to decode audio file: ${filePath}\nError: ${errorMsg}`);
           }
         } catch (ffErr) {
           console.error("ffmpeg fallback failed:", ffErr);
+          alert(`Failed to decode audio file: ${filePath}\nCritical Error: ${ffErr.message}`);
         }
       };
 
       // Try WaveSurfer load first; fall back to ffmpeg if necessary
-      const loaded = await tryLoadIntoWaveSurfer(arrayBuffer);
-      if (!loaded) await doFfmpegFallback();
+      // If WaveSurfer load fails for any reason (sync error or async error event),
+      // the `attachErrorHandler` will trigger the `doFfmpegFallback`.
+      // The `loadAudioData` function already handles synchronous errors
+      // and returns false, which also triggers the fallback.
+      attachErrorHandler(async () => {
+        // This handler catches async WaveSurfer errors (e.g., 'error' event)
+        console.warn("WaveSurfer emitted error event, triggering fallback...");
+        await doFfmpegFallback();
+      });
+
+      // Whitelist formats that browsers reliably support.
+      // Everything else goes through FFmpeg to avoid decoding errors (e.g. ALAC in m4a, some wav codecs, etc.)
+      const NATIVE_SUPPORTED_EXTS = new Set(['.wav', '.mp3', '.flac', '.ogg']);
+      const ext = filePath.toLowerCase().slice(filePath.lastIndexOf('.'));
+
+      if (!NATIVE_SUPPORTED_EXTS.has(ext)) {
+        console.log(`File extension ${ext} not in native whitelist, forcing FFmpeg decoding...`);
+        await doFfmpegFallback();
+        return;
+      }
+
+      const wavesurferLoadSuccessful = await loadAudioData(arrayBuffer);
+
+      if (!wavesurferLoadSuccessful) {
+        // This branch is reached if loadAudioData returned false (synchronous error)
+        // or if loadArrayBuffer/loadBlob/load was not available.
+        console.warn("loadAudioData returned false, triggering fallback...");
+        await doFfmpegFallback();
+      }
 
       if (myToken === loadTokenRef.current) {
         setIsPlaying(false);
@@ -521,7 +575,7 @@ export default function AudioPlayer() {
       <div className="flex items-center mt-4 w-full">
 
         <div className="flex-1" >
-        <label className="text-sm text-gray-400 mr-2 no-drag">Volume</label>
+          <label className="text-sm text-gray-400 mr-2 no-drag">Volume</label>
           <input
             type="range"
             min={0}
@@ -531,8 +585,8 @@ export default function AudioPlayer() {
             className="w-28 h-2 accent-blue-500 no-drag"
             aria-label="Volume"
           />
-          </div>
-        
+        </div>
+
         <div className="flex items-center gap-2 justify-center">
           <button
             onClick={() => hop(-1)}
@@ -618,8 +672,8 @@ export default function AudioPlayer() {
               ? pairs.filter((p) => (p.f || "").toLowerCase().includes(q))
               : pairs;
 
-              return (
-                <ul className="space-y-2 overflow-auto text-sm flex-1 min-h-0">
+            return (
+              <ul className="space-y-2 overflow-auto text-sm flex-1 min-h-0">
                 {filtered.map(({ f, idx }) => (
                   <li
                     key={f + "-" + idx}
@@ -645,7 +699,7 @@ export default function AudioPlayer() {
                             if (wsRef.current) {
                               try {
                                 wsRef.current.pause && wsRef.current.pause();
-                              } catch (e) {}
+                              } catch (e) { }
                               wsRef.current.empty && wsRef.current.empty();
                             }
                             setIsPlaying(false);
@@ -656,7 +710,7 @@ export default function AudioPlayer() {
                             ) {
                               try {
                                 currentLoadRef.current.cleanup();
-                              } catch (e) {}
+                              } catch (e) { }
                               currentLoadRef.current.cleanup = null;
                               currentLoadRef.current.url = null;
                             }
