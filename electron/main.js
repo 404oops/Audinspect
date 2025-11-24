@@ -149,15 +149,17 @@ ipcMain.handle('file:decodeToWav', async (_event, filePath) => {
   let ffmpegPath;
   try {
     ffmpegPath = require('ffmpeg-static');
+
+    // Check if ffmpeg-static returned a valid path
+    if (!ffmpegPath) throw new Error('ffmpeg-static returned null path');
+
     // Fix for Electron packaging: replace app.asar with app.asar.unpacked
     // This is required because spawn() cannot execute binaries inside the ASAR archive
-    if (app.isPackaged) {
+    if (app.isPackaged && ffmpegPath.includes('app.asar')) {
       ffmpegPath = ffmpegPath.replace('app.asar', 'app.asar.unpacked');
     }
 
-    // In production, ffmpeg-static might point to a path in app.asar.unpacked
-    // or similar. We trust the package to provide the correct path.
-    if (!ffmpegPath) throw new Error('ffmpeg-static returned null path');
+    console.log('FFmpeg path resolved to:', ffmpegPath);
   } catch (e) {
     console.error('Failed to resolve ffmpeg-static path:', e);
     return { data: null, error: `Failed to resolve ffmpeg path: ${e.message}`, code: null };

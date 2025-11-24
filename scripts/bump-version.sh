@@ -28,7 +28,7 @@ NEW_VERSION=${NEW_VERSION#v}
 echo "New version: $NEW_VERSION"
 
 # Stage the changes
-git add package.json package-lock.json
+git add .
 
 # Commit the version bump
 git commit -m "Bump version to $NEW_VERSION"
