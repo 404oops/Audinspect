@@ -7,6 +7,11 @@
     "dev": "NODE_ENV=development concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "vite build",
     "package": "npm run build && electron-builder && node scripts/clean-build.js",
+    "package:win_x64": "npm run build && electron-builder --win --x64 && node scripts/clean-build.js",
+    "package:win_arm": "npm run build && electron-builder --win --arm64 && node scripts/clean-build.js",
+    "package:mac_x64": "npm run build && electron-builder --mac --x64 && node scripts/clean-build.js",
+    "package:mac_arm": "npm run build && electron-builder --mac --arm64 && node scripts/clean-build.js",
+    "package:linux": "npm run build && electron-builder --linux --x64 && node scripts/clean-build.js",
     "package:all": "npm run build && electron-builder -mwl && node scripts/clean-build.js",
     "postinstall": "electron-rebuild"
   },
@@ -27,7 +32,16 @@
       "dist/*.html",
       "dist/assets/*",
       "electron/*",
-      "package.json"
+      "package.json",
+      "!**/node_modules/**/*.md",
+      "!**/node_modules/**/*.d.ts",
+      "!**/node_modules/**/*.map",
+      "!**/node_modules/**/test/**",
+      "!**/node_modules/**/tests/**",
+      "!**/node_modules/**/__tests__/**",
+      "!**/node_modules/**/docs/**",
+      "!**/node_modules/**/example/**",
+      "!**/node_modules/**/examples/**"
     ],
     "directories": {
       "output": "build"
@@ -36,28 +50,31 @@
       "target": [
         {
           "target": "nsis",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
+          "arch": "x64"
         }
       ],
       "files": [
-        "!**/node_modules/ffmpeg-static/ffmpeg"
+        "!**/node_modules/ffmpeg-static/ffmpeg",
+        "!**/node_modules/ffprobe-static/bin/darwin/**",
+        "!**/node_modules/ffprobe-static/bin/linux/**"
       ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false
     },
     "mac": {
       "target": [
         {
           "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
+          "arch": "arm64"
         }
       ],
       "files": [
-        "!**/node_modules/ffmpeg-static/ffmpeg.exe"
+        "!**/node_modules/ffmpeg-static/ffmpeg.exe",
+        "!**/node_modules/ffprobe-static/bin/win32/**",
+        "!**/node_modules/ffprobe-static/bin/linux/**"
       ]
     },
     "linux": {
@@ -65,9 +82,12 @@
         "AppImage"
       ],
       "files": [
-        "!**/node_modules/ffmpeg-static/ffmpeg.exe"
+        "!**/node_modules/ffmpeg-static/ffmpeg.exe",
+        "!**/node_modules/ffprobe-static/bin/win32/**",
+        "!**/node_modules/ffprobe-static/bin/darwin/**"
       ]
-    }
+    },
+    "compression": "maximum"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.1.1",
