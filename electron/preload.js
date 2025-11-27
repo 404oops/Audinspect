@@ -1,31 +1,74 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-// Expose protected methods that allow the renderer process to use
-// limited main-process functionality without exposing the entire ipcRenderer
+
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
   openFolder: () => ipcRenderer.invoke('dialog:openFolder'),
+  openFiles: () => ipcRenderer.invoke('dialog:openFiles'),
   readAudioFiles: (folderPath) => ipcRenderer.invoke('files:readAudio', folderPath),
+  scanPaths: (paths) => ipcRenderer.invoke('files:scanPaths', paths),
+  getFileMetadata: (paths) => ipcRenderer.invoke('files:getMetadata', paths),
   listFolder: (folderPath) => ipcRenderer.invoke('files:list', folderPath),
   traverseFolder: (folderPath) => ipcRenderer.invoke('files:traverse', folderPath),
-  // helper for converting paths to file URLs in renderer without using Node 'path'
+  getFilePath: (fileRef) => ipcRenderer.invoke('file:getPath', fileRef),
+  processFromBytes: (fileName, fileBytes) => ipcRenderer.invoke('file:processFromBytes', fileName, fileBytes),
+
   toFileUrl: (p) => {
     if (!p) return '';
-    // On Windows, ensure the path uses forward slashes and has an extra leading slash
+
     if (process.platform === 'win32') {
       const forward = p.replace(/\\/g, '/');
       return `file:///${forward}`;
     }
     return `file://${p}`;
   },
-  // read a file as raw bytes (Buffer) from the main process
+
   readFile: (filePath) => ipcRenderer.invoke('file:read', filePath),
-  // decode via ffmpeg on the main process and return WAV bytes (requires ffmpeg installed)
+
   decodeToWav: (filePath) => ipcRenderer.invoke('file:decodeToWav', filePath),
-  // Register a listener for files loaded via the application menu
+  probeDuration: (filePath) => ipcRenderer.invoke('file:probeDuration', filePath),
+  probeDurationsForFiles: (paths) => ipcRenderer.invoke('files:probeDurations', paths),
+  onProbeDurationsProgress: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('files:probeDurations:progress', listener);
+    return () => ipcRenderer.removeListener('files:probeDurations:progress', listener);
+  },
+
   onFilesLoaded: (callback) => {
     const listener = (_event, files) => callback(files);
     ipcRenderer.on('files:loaded', listener);
     return () => ipcRenderer.removeListener('files:loaded', listener);
   },
+  onMediaPlayPause: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = () => callback();
+    ipcRenderer.on('media:playPause', listener);
+    return () => ipcRenderer.removeListener('media:playPause', listener);
+  },
+  onMediaNext: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = () => callback();
+    ipcRenderer.on('media:next', listener);
+    return () => ipcRenderer.removeListener('media:next', listener);
+  },
+  onMediaPrevious: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = () => callback();
+    ipcRenderer.on('media:previous', listener);
+    return () => ipcRenderer.removeListener('media:previous', listener);
+  },
+  updatePlaybackState: (isPlaying) => ipcRenderer.invoke('player:updatePlaybackState', !!isPlaying),
+
+  minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
+  maximizeWindow: () => ipcRenderer.invoke('window:maximize'),
+  closeWindow: () => ipcRenderer.invoke('window:close'),
+
+  onFullscreenChange: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, isFullscreen) => callback(isFullscreen);
+    ipcRenderer.on('window:fullscreen-change', listener);
+    return () => ipcRenderer.removeListener('window:fullscreen-change', listener);
+  },
 });
+
