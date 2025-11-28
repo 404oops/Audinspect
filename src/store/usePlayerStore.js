@@ -31,6 +31,49 @@ try {
   }
 } catch (e) {}
 
+// Playback speed always resets to 1x on startup (not persisted)
+const initialPlaybackSpeed = 1;
+
+let initialWavesurferTheme = "classic";
+try {
+  if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+    const savedTheme = localStorage.getItem("wavesurferTheme");
+    if (savedTheme && ["classic", "precise", "minimal"].includes(savedTheme)) {
+      initialWavesurferTheme = savedTheme;
+    }
+  }
+} catch (e) {}
+
+let initialWavesurferShowHover = true;
+try {
+  if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+    const savedHover = localStorage.getItem("wavesurferShowHover");
+    if (savedHover !== null) {
+      initialWavesurferShowHover = savedHover === "true";
+    }
+  }
+} catch (e) {}
+
+let initialAudioOutputDevice = "";
+try {
+  if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+    const savedDevice = localStorage.getItem("audioOutputDevice");
+    if (savedDevice) {
+      initialAudioOutputDevice = savedDevice;
+    }
+  }
+} catch (e) {}
+
+let initialPreservePitch = true;
+try {
+  if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+    const savedPreservePitch = localStorage.getItem("preservePitch");
+    if (savedPreservePitch !== null) {
+      initialPreservePitch = savedPreservePitch === "true";
+    }
+  }
+} catch (e) {}
+
 const usePlayerStore = create((set, get) => ({
   // core playback / selection
   files: [],
@@ -44,9 +87,11 @@ const usePlayerStore = create((set, get) => ({
   time: 0,
   volume: 100,
   nudgeAmount: initialNudgeAmount,
-  playbackSpeed: 1,
-  wavesurferTheme: "precision",
-  wavesurferShowHover: true,
+  playbackSpeed: initialPlaybackSpeed,
+  wavesurferTheme: initialWavesurferTheme,
+  wavesurferShowHover: initialWavesurferShowHover,
+  audioOutputDevice: initialAudioOutputDevice,
+  preservePitch: initialPreservePitch,
 
   // folder / playlist context
   folderTree: null,
@@ -94,9 +139,49 @@ const usePlayerStore = create((set, get) => ({
       } catch (e) {}
       return { nudgeAmount: rangeClamped };
     }),
-  setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
-  setWavesurferTheme: (theme) => set({ wavesurferTheme: theme }),
-  setWavesurferShowHover: (show) => set({ wavesurferShowHover: show }),
+  setPlaybackSpeed: (speed) =>
+    set((state) => {
+      const clamped =
+        typeof speed === "number" && Number.isFinite(speed)
+          ? Math.min(4, Math.max(0.25, speed))
+          : state.playbackSpeed;
+      return { playbackSpeed: clamped };
+    }),
+  setWavesurferTheme: (theme) => {
+    if (!theme || !["classic", "precise", "minimal"].includes(theme)) return;
+    set({ wavesurferTheme: theme });
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem("wavesurferTheme", theme);
+      }
+    } catch (e) {}
+  },
+  setWavesurferShowHover: (show) => {
+    const val = Boolean(show);
+    set({ wavesurferShowHover: val });
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem("wavesurferShowHover", val.toString());
+      }
+    } catch (e) {}
+  },
+  setAudioOutputDevice: (deviceId) => {
+    set({ audioOutputDevice: deviceId || "" });
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem("audioOutputDevice", deviceId || "");
+      }
+    } catch (e) {}
+  },
+  setPreservePitch: (preserve) => {
+    const val = Boolean(preserve);
+    set({ preservePitch: val });
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem("preservePitch", val.toString());
+      }
+    } catch (e) {}
+  },
   setFolderTree: (folderTree) => set({ folderTree }),
   setDurations: (durations) => set({ durations }),
   setFileMetadata: (fileMetadata) => set({ fileMetadata }),

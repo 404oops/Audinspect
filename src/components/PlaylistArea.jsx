@@ -32,6 +32,7 @@ export default function PlaylistArea({
   onDragLeave,
   onDrop,
 }) {
+  const [isOpenMenu, setIsOpenMenu] = useState(false);
   const pairs = files.map((f, idx) => ({ f, idx }));
   const q = (searchQuery || "").toLowerCase().trim();
   const filtered = q
@@ -270,32 +271,70 @@ export default function PlaylistArea({
                 className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/70"
               />
             </div>
-            <div className="relative group">
+            <div
+              className="relative"
+              onBlur={(e) => {
+                const next = e.relatedTarget;
+                if (!next || !e.currentTarget.contains(next)) {
+                  setIsOpenMenu(false);
+                }
+              }}
+            >
               <button
+                type="button"
                 title="Open files or folder"
-                className="w-[85px] bg-[var(--accent-color)] border-2 border-[var(--accent-color)] hover:bg-white hover:text-[var(--accent-color)] text-white px-4 py-8 transition-all duration-200 no-drag flex items-center gap-8 group-hover:opacity-0 group-hover:invisible justify-center"
+                className="w-[110px] bg-[var(--accent-color)] border-2 border-[var(--accent-color)] hover:bg-white hover:text-[var(--accent-color)] text-white px-8 py-8 transition-all duration-200 no-drag flex items-center justify-between gap-4"
                 aria-label="Open files or folder"
+                aria-haspopup="menu"
+                aria-expanded={isOpenMenu}
+                aria-controls="playlist-open-menu"
+                onClick={() => setIsOpenMenu((prev) => !prev)}
               >
-                Open
+                <span className="text-sm font-medium">Open</span>
+                <ChevronDown size={14} strokeWidth={2} />
               </button>
-              <div className="absolute inset-0 flex border-2 border-[var(--accent-color)] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
-                <button
-                  onClick={() => handleOpenFile && handleOpenFile()}
-                  title="Open file"
-                  className="bg-[var(--accent-color)] hover:bg-white hover:text-[var(--accent-color)] text-white py-8 transition-all duration-200 no-drag flex items-center justify-center border-r border-[var(--accent-color)] flex-1"
-                  aria-label="Open file"
+              {isOpenMenu && (
+                <div
+                  id="playlist-open-menu"
+                  className="absolute right-0 mt-2 w-[180px] bg-pure-black border-2 border-white shadow-lg z-50"
+                  role="menu"
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      e.stopPropagation();
+                      setIsOpenMenu(false);
+                    }
+                  }}
                 >
-                  <File size={16} strokeWidth={2} />
-                </button>
-                <button
-                  onClick={() => handleOpenFolder && handleOpenFolder()}
-                  title="Open folder"
-                  className="bg-[var(--accent-color)] hover:bg-white hover:text-[var(--accent-color)] text-white py-8 transition-all duration-200 no-drag flex items-center justify-center flex-1"
-                  aria-label="Open folder"
-                >
-                  <Folder size={16} strokeWidth={2} />
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOpenMenu(false);
+                      handleOpenFile && handleOpenFile();
+                    }}
+                    title="Open file"
+                    className="w-full flex items-center gap-4 px-8 py-8 text-sm text-white hover:bg-white hover:text-pure-black no-drag"
+                    aria-label="Open file"
+                    role="menuitem"
+                  >
+                    <File size={16} strokeWidth={2} />
+                    <span>Open file</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOpenMenu(false);
+                      handleOpenFolder && handleOpenFolder();
+                    }}
+                    title="Open folder"
+                    className="w-full flex items-center gap-4 px-8 py-8 text-sm text-white hover:bg-white hover:text-pure-black no-drag"
+                    aria-label="Open folder"
+                    role="menuitem"
+                  >
+                    <Folder size={16} strokeWidth={2} />
+                    <span>Open folder</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

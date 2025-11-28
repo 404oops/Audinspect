@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from "react";
 import {
   Play,
   Pause,
@@ -49,11 +50,33 @@ export default function PlayerArea({
         : nudgeAmount.toFixed(2)
       : "0";
 
+  const presetSpeeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+  const isCustomSpeed = !presetSpeeds.includes(playbackSpeed);
+
+  const [speedText, setSpeedText] = useState(() => playbackSpeed.toFixed(2));
+  const [isSpeedMenuOpen, setIsSpeedMenuOpen] = useState(false);
+  const speedMenuRef = useRef(null);
+
+  useEffect(() => {
+    setSpeedText(playbackSpeed.toFixed(2));
+  }, [playbackSpeed]);
+
+  useEffect(() => {
+    if (!isSpeedMenuOpen) return;
+    const handleClickOutside = (e) => {
+      if (speedMenuRef.current && !speedMenuRef.current.contains(e.target)) {
+        setIsSpeedMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isSpeedMenuOpen]);
+
   return (
     <div
       ref={playerAreaRef}
-      className="relative bg-pure-black border-2 border-white overflow-hidden"
-      style={{ flexShrink: 0, zIndex: 1 }}
+      className="relative bg-pure-black border-2 border-white overflow-visible"
+      style={{ flexShrink: 0, zIndex: 20 }}
     >
       {isDragging && dragTarget === "player" && (
         <div
@@ -216,28 +239,87 @@ export default function PlayerArea({
             </div>
 
             {/* Playback Speed Selector */}
-            <div className="pl-8">
-              <div className="relative inline-block">
-                <select
-                  value={playbackSpeed}
-                  onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
-                  className="bg-pure-black text-white border-2 border-white text-xs px-8 pr-[13px] pl-[13px] py-[0.6rem] no-drag appearance-none focus:outline-none focus:border-[var(--accent-color)] transition-all"
-                  title="Playback Speed"
+            <div className="pl-8 mb-[3px] flex items-center">
+              <div className="flex items-center gap-4">
+                
+                <div
+                  ref={speedMenuRef}
+                  className="relative inline-block"
                 >
-                  <option value="0.25">0.25×</option>
-                  <option value="0.5">0.5×</option>
-                  <option value="0.75">0.75×</option>
-                  <option value="1">1×</option>
-                  <option value="1.25">1.25×</option>
-                  <option value="1.5">1.5×</option>
-                  <option value="1.75">1.75×</option>
-                  <option value="2">2×</option>
-                </select>
-                <ChevronDown
-                  size={14}
-                  strokeWidth={2}
-                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/70"
-                />
+                  <input
+                    id="playback-speed-input"
+                    type="text"
+                    inputMode="decimal"
+                    value={`${speedText}x`}
+                    onChange={(e) => setSpeedText(e.target.value.replace(/[x×]/gi, ""))}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const raw = e.target.value.trim().replace(/[x×]/gi, "");
+                        const value = parseFloat(raw);
+                        if (!Number.isNaN(value)) {
+                          setPlaybackSpeed(value);
+                        } else {
+                          setSpeedText(playbackSpeed.toFixed(2));
+                        }
+                        e.target.blur();
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const raw = e.target.value.trim().replace(/[x×]/gi, "");
+                      const value = parseFloat(raw);
+                      if (!Number.isNaN(value)) {
+                        setPlaybackSpeed(value);
+                      } else {
+                        setSpeedText(playbackSpeed.toFixed(2));
+                      }
+                    }}
+                    className="bg-pure-black text-white border-2 border-white text-xs w-[70px] pr-6 py-[0.5rem] no-drag focus:outline-none focus:border-[var(--accent-color)] transition-all text-right"
+                    aria-label="Playback speed"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 text-white/70 px-1 py-1 no-drag"
+                    aria-label="Playback speed presets"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                    }}
+                    onClick={() => setIsSpeedMenuOpen((prev) => !prev)}
+                  >
+                    <ChevronDown size={14} strokeWidth={2} />
+                  </button>
+                  {isSpeedMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-[120px] bg-pure-black border-2 border-white shadow-lg z-50">
+                      {isCustomSpeed && (
+                        <div className="px-10 py-4 text-[11px] text-white/50">
+                          current: {playbackSpeed.toFixed(2)}×
+                        </div>
+                      )}
+                      {presetSpeeds.map((speed) => {
+                        const label = Number.isInteger(speed)
+                          ? speed.toFixed(0)
+                          : speed.toFixed(2);
+                        const isActive = speed === playbackSpeed;
+                        return (
+                          <button
+                            key={speed}
+                            type="button"
+                            onClick={() => {
+                              setPlaybackSpeed(speed);
+                              setIsSpeedMenuOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between px-2 py-2 text-xs no-drag transition-colors ${
+                              isActive
+                                ? "bg-[var(--accent-color)] text-white"
+                                : "bg-pure-black text-white hover:bg-white hover:text-pure-black"
+                            }`}
+                          >
+                            <span>{`${label}x ${label === '1' ? '(default)' : ''}`}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

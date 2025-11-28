@@ -6,8 +6,10 @@ import {
   Settings2,
   Check,
   ChevronDown,
+  Info,
 } from "lucide-react";
 import usePlayerStore from "../store/usePlayerStore";
+import appIcon from "../../resources/icon.png";
 
 const PRESET_COLORS = [
   { name: "International Blue", value: "#0050ff" },
@@ -35,25 +37,30 @@ export default function Settings({ isOpen, onClose }) {
   const setWavesurferShowHover = usePlayerStore(
     (state) => state.setWavesurferShowHover
   );
+  const audioOutputDevice = usePlayerStore((state) => state.audioOutputDevice);
+  const setAudioOutputDevice = usePlayerStore(
+    (state) => state.setAudioOutputDevice
+  );
+  const preservePitch = usePlayerStore((state) => state.preservePitch);
+  const setPreservePitch = usePlayerStore((state) => state.setPreservePitch);
   const [audioDevices, setAudioDevices] = useState([]);
-  const [selectedDevice, setSelectedDevice] = useState("");
   const [activeTab, setActiveTab] = useState("general");
   const [rememberLastFolder, setRememberLastFolder] = useState(false);
   const [rememberLastSortMode, setRememberLastSortMode] = useState(false);
   const [sortModeScope, setSortModeScope] = useState("global");
 
   const selectThemeClass = {
-    precision:
+    classic:
       "bg-pure-black text-white border-2 border-white focus:border-[var(--accent-color)]",
-    prettiness:
-      "bg-gradient-to-r from-[var(--accent-color)]/20 via-pink-500/25 to-purple-500/20 text-white border-2 border-[var(--accent-color)]/60 hover:border-[var(--accent-color)] focus:border-[var(--accent-color)]",
+    precise:
+      "bg-pure-black text-white border-2 border-[var(--accent-color)]/60 hover:border-[var(--accent-color)] focus:border-[var(--accent-color)]",
     minimal:
       "bg-pure-black/85 text-white/85 border border-white/30 hover:border-white/60 focus:border-[var(--accent-color)] text-sm",
   };
 
   const chevronThemeClass = {
-    precision: "text-white/70",
-    prettiness: "text-white",
+    classic: "text-white/70",
+    precise: "text-white",
     minimal: "text-white/60",
   };
 
@@ -77,11 +84,6 @@ export default function Settings({ isOpen, onClose }) {
   }, [isOpen, onClose]);
 
   const loadSettings = () => {
-    const savedDevice = localStorage.getItem("audioOutputDevice");
-    if (savedDevice) {
-      setSelectedDevice(savedDevice);
-    }
-
     const savedRememberLastFolder = localStorage.getItem("rememberLastFolder");
     setRememberLastFolder(savedRememberLastFolder === "true");
 
@@ -104,8 +106,9 @@ export default function Settings({ isOpen, onClose }) {
       );
       setAudioDevices(audioOutputs);
 
-      if (audioOutputs.length > 0 && !selectedDevice) {
-        setSelectedDevice(audioOutputs[0].deviceId);
+      // If no device is selected yet, default to the first one
+      if (audioOutputs.length > 0 && !audioOutputDevice) {
+        setAudioOutputDevice(audioOutputs[0].deviceId);
       }
     } catch (error) {
       console.error("Error loading audio devices:", error);
@@ -118,29 +121,9 @@ export default function Settings({ isOpen, onClose }) {
     localStorage.setItem("accentColor", color);
   };
 
-  const handleDeviceChange = async (deviceId) => {
-    setSelectedDevice(deviceId);
-    localStorage.setItem("audioOutputDevice", deviceId);
-
-    const audioElement = document.querySelector("audio");
-    if (audioElement && typeof audioElement.setSinkId === "function") {
-      try {
-        await audioElement.setSinkId(deviceId);
-      } catch (error) {
-        console.error("Error setting audio output device:", error);
-      }
-    }
-
-    try {
-      if (
-        window.wavesurfer &&
-        typeof window.wavesurfer.setSinkId === "function"
-      ) {
-        await window.wavesurfer.setSinkId(deviceId);
-      }
-    } catch (error) {
-      console.error("Error setting WaveSurfer audio output device:", error);
-    }
+  const handleDeviceChange = (deviceId) => {
+    // Update store - AudioPlayer will react to this and apply setSinkId
+    setAudioOutputDevice(deviceId);
   };
 
   const handleCustomColorChange = (e) => {
@@ -217,7 +200,7 @@ export default function Settings({ isOpen, onClose }) {
           </button>
           <button
             onClick={() => setActiveTab("audio")}
-            className={`flex items-center gap-8 px-16 py-8 text-white transition-all duration-200 ${
+            className={`flex items-center gap-8 px-16 py-8 text-white transition-all duration-200 border-r-2 border-white ${
               activeTab === "audio"
                 ? "bg-[var(--accent-color)]"
                 : "bg-pure-black hover:bg-white/10"
@@ -225,6 +208,17 @@ export default function Settings({ isOpen, onClose }) {
           >
             <Volume2 size={16} strokeWidth={2} />
             <span>Audio</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("about")}
+            className={`flex items-center gap-8 px-16 py-8 text-white transition-all duration-200 ${
+              activeTab === "about"
+                ? "bg-[var(--accent-color)]"
+                : "bg-pure-black hover:bg-white/10"
+            }`}
+          >
+            <Info size={16} strokeWidth={2} />
+            <span>About</span>
           </button>
         </div>
 
@@ -343,6 +337,70 @@ export default function Settings({ isOpen, onClose }) {
                   )}
                 </div>
               </div>
+
+              {/* Playback */}
+              <div>
+                <h3 className="text-sm font-bold text-white mb-16 uppercase tracking-wider">
+                  Playback
+                </h3>
+
+                <div className="flex items-center gap-16">
+                  <label className="block text-14 font-medium whitespace-nowrap">
+                    Nudge amount
+                  </label>
+                  <input
+                    type="range"
+                    min="0.25"
+                    max="3"
+                    step="0.25"
+                    value={nudgeAmount}
+                    onChange={(e) =>
+                      setNudgeAmount(parseFloat(e.target.value))
+                    }
+                    className="flex-1 h-2 bg-white/20 appearance-none cursor-pointer"
+                    style={{
+                      background: `linear-gradient(to right, var(--accent-color) 0%, var(--accent-color) ${((nudgeAmount - 0.25) / 2.75) * 100}%, rgba(255,255,255,0.2) ${((nudgeAmount - 0.25) / 2.75) * 100}%, rgba(255,255,255,0.2) 100%)`,
+                    }}
+                  />
+                  <div className="text-sm font-mono text-white/60 min-w-[60px] text-right">
+                    {nudgeAmount.toFixed(2)}s
+                  </div>
+                </div>
+                <div className="flex justify-between text-12 text-white/40 mt-4 ml-[120px]">
+                  <span>0.25s</span>
+                  <span className="mr-[68px]">3s</span>
+                </div>
+
+                <div className="mt-24">
+                  <label className="flex items-center gap-5 cursor-pointer group">
+                    <div className="relative">
+                      <input
+                        type="checkbox"
+                        checked={preservePitch}
+                        onChange={(e) => setPreservePitch(e.target.checked)}
+                        className="sr-only"
+                      />
+                      <div
+                        className={`size-6 border-2 transition-all duration-200 ${
+                          preservePitch
+                            ? "bg-[var(--accent-color)] border-[var(--accent-color)]"
+                            : "bg-pure-black border-white/40 group-hover:border-white"
+                        }`}
+                      >
+                        {preservePitch && (
+                          <Check size={20} strokeWidth={2} />
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-white">
+                      Preserve pitch when changing speed
+                    </span>
+                  </label>
+                  <p className="mt-[1rem] text-sm text-white/40">
+                    When enabled, changing playback speed will not affect the pitch of the audio.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
@@ -396,66 +454,72 @@ export default function Settings({ isOpen, onClose }) {
               </div>
 
               {/* Waveform Theme */}
-              <div className="mb-24 flex items-center gap-16">
-                <label className="block text-14 font-medium mb-8">
-                  Waveform Theme
-                </label>
-                <div className="relative inline-block">
-                  <select
-                    value={wavesurferTheme}
-                    onChange={(e) => setWavesurferTheme(e.target.value)}
-                    className={`text-xs px-8 pr-32 pl-5 py-[0.6rem] no-drag appearance-none transition-all duration-200 focus:outline-none ${
-                      selectThemeClass[wavesurferTheme] ||
-                      selectThemeClass.precision
-                    }`}
-                  >
-                    <option value="precision">Precision Mode</option>
-                    <option value="prettiness">Prettiness</option>
-                    <option value="minimal">Minimal</option>
-                  </select>
-                  <ChevronDown
-                    size={14}
-                    strokeWidth={2}
-                    className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-colors ${
-                      chevronThemeClass[wavesurferTheme] ||
-                      chevronThemeClass.precision
-                    }`}
-                  />
+              <div className="mb-24">
+                <div className="flex items-center gap-16">
+                  <label className="block text-14 font-medium">
+                    Waveform Theme
+                  </label>
+                  <div className="relative inline-block">
+                    <select
+                      value={wavesurferTheme}
+                      onChange={(e) => setWavesurferTheme(e.target.value)}
+                      className={`text-xs px-8 pr-32 pl-5 py-[0.6rem] no-drag appearance-none transition-all duration-200 focus:outline-none ${
+                        selectThemeClass[wavesurferTheme] ||
+                        selectThemeClass.classic
+                      }`}
+                    >
+                      <option value="classic">Classic</option>
+                      <option value="precise">Precise</option>
+                      <option value="minimal">Minimal</option>
+                    </select>
+                    <ChevronDown
+                      size={14}
+                      strokeWidth={2}
+                      className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-colors ${
+                        chevronThemeClass[wavesurferTheme] ||
+                        chevronThemeClass.classic
+                      }`}
+                    />
+                  </div>
                 </div>
+                <p className="mt-8 text-sm text-white/40">
+                  Changing the theme will briefly pause playback.
+                </p>
               </div>
 
               {/* Show Hover Plugin */}
-              <div className="mb-24 flex items-center justify-between">
-                <label className="text-14 font-medium">
-                  Show cursor with time
-                </label>
-                <input
-                  type="checkbox"
-                  checked={wavesurferShowHover}
-                  onChange={(e) => setWavesurferShowHover(e.target.checked)}
-                  className="w-16 h-16 accent-accent-color cursor-pointer"
-                />
-              </div>
-
-              {/* Nudge Amount */}
               <div className="mb-24">
-                <label className="block text-14 font-medium mb-8">
-                  Nudge Amount: {nudgeAmount.toFixed(2)}s
+                <label className="flex items-center gap-5 cursor-pointer group">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={wavesurferShowHover}
+                      onChange={(e) => setWavesurferShowHover(e.target.checked)}
+                      className="sr-only"
+                    />
+                    <div
+                      className={`size-6 border-2 transition-all duration-200 ${
+                        wavesurferShowHover
+                          ? "bg-[var(--accent-color)] border-[var(--accent-color)]"
+                          : "bg-pure-black border-white/40 group-hover:border-white"
+                      }`}
+                    >
+                      {wavesurferShowHover && (
+                        <Check size={20} strokeWidth={2} />
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-white">Show cursor with time</span>
+                  
                 </label>
-                <input
-                  type="range"
-                  min="0.25"
-                  max="3"
-                  step="0.25"
-                  value={nudgeAmount}
-                  onChange={(e) => setNudgeAmount(parseFloat(e.target.value))}
-                  className="w-full accent-accent-color"
-                />
-                <div className="flex justify-between text-12 text-gray-500 mt-4">
-                  <span>0.25s</span>
-                  <span>3s</span>
-                </div>
               </div>
+              <p className="mt-8 text-sm text-white/40">
+                  When enabled, you will see a visible seek head with a flag on the upper-right corner indicating the time at the position of the seek head when you move your cursor on the track view.
+                </p>
+                <p className="mt-8 text-sm text-white/40">
+                  Changing this will briefly pause playback.
+                </p>
+
             </div>
           )}
 
@@ -468,7 +532,7 @@ export default function Settings({ isOpen, onClose }) {
 
                 {audioDevices.length > 0 ? (
                   <select
-                    value={selectedDevice}
+                    value={audioOutputDevice}
                     onChange={(e) => handleDeviceChange(e.target.value)}
                     className="w-full px-8 py-8 bg-pure-black border-2 border-white text-white focus:outline-none focus:border-[var(--accent-color)] transition-all duration-200"
                   >
@@ -492,6 +556,37 @@ export default function Settings({ isOpen, onClose }) {
                   immediately.
                 </p>
               </div>
+            </div>
+          )}
+
+          {activeTab === "about" && (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <img
+                src={appIcon}
+                alt="Audinspect Icon"
+                className="w-96 h-96 mb-16"
+              />
+              <h3 className="text-2xl font-bold text-white mb-8">Audinspect</h3>
+              <p className="text-white/60 mb-4">Version 2.1.0 (a)</p>
+              <p className="text-white/40 text-sm">Created by 404oops</p>
+
+              <div className="flex gap-4 mt-6">
+                <button
+                  onClick={() => window.electronAPI.openExternal('https://github.com/404oops/Audinspect')}
+                  className="text-white/50 hover:text-white text-sm transition-colors"
+                >
+                  GitHub
+                </button>
+                <span className="text-white/20">•</span>
+                <button
+                  onClick={() => window.electronAPI.openExternal('https://github.com/404oops/Audinspect/blob/main/LICENSE')}
+                  className="text-white/50 hover:text-white text-sm transition-colors"
+                >
+                  License
+                </button>
+              </div>
+
+              <p className="text-white/20 text-xs mt-8">© 2025 404oops. Licensed under GPL-3.0.</p>
             </div>
           )}
         </div>

@@ -25,6 +25,7 @@ export default function AudioPlayer() {
   const dragTimeoutRef = useRef(null);
   const hoverPluginRef = useRef(null);
   const hopFnRef = useRef(() => {});
+  const hasFolderWatchRef = useRef(false);
 
   const {
     files,
@@ -68,6 +69,8 @@ export default function AudioPlayer() {
     playbackSpeed,
     wavesurferTheme,
     wavesurferShowHover,
+    audioOutputDevice,
+    preservePitch,
   } = usePlayerStore();
 
   useEffect(() => {
@@ -118,7 +121,7 @@ export default function AudioPlayer() {
 
     // Theme configurations
     const themes = {
-      precision: {
+      classic: {
         waveColor: "#333333",
         progressColor: accentColor,
         height: 250,
@@ -126,7 +129,7 @@ export default function AudioPlayer() {
         barGap: 0,
         barRadius: 0,
       },
-      prettiness: {
+      precise: {
         waveColor: "#444444",
         progressColor: accentColor,
         height: 250,
@@ -144,7 +147,7 @@ export default function AudioPlayer() {
       },
     };
 
-    const themeConfig = themes[wavesurferTheme] || themes.precision;
+    const themeConfig = themes[wavesurferTheme] || themes.classic;
 
     const inst = WaveSurfer.create({
       container: containerRef.current,
@@ -152,7 +155,6 @@ export default function AudioPlayer() {
       cursorColor: "#ffffff",
       normalize: true,
       responsive: true,
-      backend: "WebAudio",
       interact: true,
       hideScrollbar: true,
     });
@@ -218,6 +220,13 @@ export default function AudioPlayer() {
 
     try {
       inst.setVolume && inst.setVolume(volume / 100);
+      // Apply pitch preservation setting
+      const mediaEl = inst.getMediaElement?.();
+      if (mediaEl) {
+        mediaEl.preservesPitch = preservePitch;
+        mediaEl.mozPreservesPitch = preservePitch; // Firefox fallback
+        mediaEl.webkitPreservesPitch = preservePitch; // Safari fallback
+      }
       inst.setPlaybackRate && inst.setPlaybackRate(playbackSpeed);
     } catch (e) {}
     wsRef.current = inst;
@@ -232,6 +241,28 @@ export default function AudioPlayer() {
     }
   }, [volume]);
 
+  // Apply audio output device changes
+  useEffect(() => {
+    if (!audioOutputDevice || !wsRef.current) return;
+
+    const applyDevice = async () => {
+      try {
+        // WaveSurfer has setSinkId method on its media element
+        const mediaElement = wsRef.current.getMediaElement?.();
+        if (mediaElement && typeof mediaElement.setSinkId === "function") {
+          await mediaElement.setSinkId(audioOutputDevice);
+        } else if (typeof wsRef.current.setSinkId === "function") {
+          // Some versions expose setSinkId directly on WaveSurfer
+          await wsRef.current.setSinkId(audioOutputDevice);
+        }
+      } catch (error) {
+        console.warn("Failed to set audio output device:", error);
+      }
+    };
+
+    applyDevice();
+  }, [audioOutputDevice]);
+
   // Update playback speed when it changes
   useEffect(() => {
     if (wsRef.current && typeof wsRef.current.setPlaybackRate === "function") {
@@ -240,6 +271,14 @@ export default function AudioPlayer() {
         const wasPlaying = ws.isPlaying && ws.isPlaying();
         const prevTime = ws.getCurrentTime ? ws.getCurrentTime() : 0;
         const dur = ws.getDuration ? ws.getDuration() : 0;
+
+        // Apply pitch preservation setting
+        const mediaEl = ws.getMediaElement?.();
+        if (mediaEl) {
+          mediaEl.preservesPitch = preservePitch;
+          mediaEl.mozPreservesPitch = preservePitch;
+          mediaEl.webkitPreservesPitch = preservePitch;
+        }
 
         ws.setPlaybackRate(playbackSpeed);
 
@@ -259,21 +298,47 @@ export default function AudioPlayer() {
         console.warn("Failed to adjust playback rate:", e);
       }
     }
-  }, [playbackSpeed]);
+  }, [playbackSpeed, preservePitch]);
+
+  // Update preservePitch setting when it changes
+  useEffect(() => {
+    if (wsRef.current) {
+      try {
+        const mediaEl = wsRef.current.getMediaElement?.();
+        if (mediaEl) {
+          mediaEl.preservesPitch = preservePitch;
+          mediaEl.mozPreservesPitch = preservePitch;
+          mediaEl.webkitPreservesPitch = preservePitch;
+        }
+      } catch (e) {}
+    }
+  }, [preservePitch]);
 
   // Update wavesurfer when theme changes
   useEffect(() => {
     if (wsRef.current) {
-      // Recreate wavesurfer with new theme
+      // Capture current state before destroying
       const wasPlaying = isPlaying;
       const currentTime = wsRef.current.getCurrentTime
         ? wsRef.current.getCurrentTime()
         : 0;
 
+      // Stop playback and update state before destroying
+      try {
+        if (wsRef.current.isPlaying && wsRef.current.isPlaying()) {
+          wsRef.current.pause();
+        }
+        wsRef.current.stop && wsRef.current.stop();
+      } catch (e) {}
+
+      isPlayingRef.current = false;
+      setIsPlaying(false);
+
       try {
         wsRef.current.destroy();
       } catch (e) {}
 
+      wsRef.current = null;
       createWaveSurfer();
 
       // Reload current file if there was one
@@ -365,6 +430,16 @@ export default function AudioPlayer() {
         } catch (e) {}
         wsRef.current = null;
       }
+
+      if (
+        window.electronAPI &&
+        typeof window.electronAPI.unwatchFolder === "function"
+      ) {
+        try {
+          window.electronAPI.unwatchFolder();
+        } catch (e) {}
+      }
+      hasFolderWatchRef.current = false;
     };
   }, []);
 
@@ -398,6 +473,19 @@ export default function AudioPlayer() {
           const list = await window.electronAPI.readAudioFiles(lastFolder);
           if (list && list.length > 0) {
             setCurrentFolderPath(lastFolder);
+            if (
+              window.electronAPI &&
+              typeof window.electronAPI.watchFolder === "function"
+            ) {
+              try {
+                await window.electronAPI.watchFolder(lastFolder);
+                hasFolderWatchRef.current = true;
+              } catch (e) {
+                hasFolderWatchRef.current = false;
+              }
+            } else {
+              hasFolderWatchRef.current = false;
+            }
             await preloadMetadataForInitialSort(list);
             setFiles(list);
             const rows = getVisibleRows(list);
@@ -428,19 +516,54 @@ export default function AudioPlayer() {
     const loadMetadata = async () => {
       const uniquePaths = [...new Set((files || []).filter(Boolean))];
       if (!uniquePaths.length) {
-        setFileMetadata({});
+        const state = usePlayerStore.getState();
+        const baseMeta =
+          state.fileMetadata && typeof state.fileMetadata === "object"
+            ? state.fileMetadata
+            : {};
+        if (Object.keys(baseMeta).length) {
+          setFileMetadata({});
+        }
         return;
       }
       try {
-        const result = await window.electronAPI.getFileMetadata(uniquePaths);
+        const state = usePlayerStore.getState();
+        const baseMeta =
+          state.fileMetadata && typeof state.fileMetadata === "object"
+            ? state.fileMetadata
+            : {};
+        const missing = uniquePaths.filter((p) => {
+          const meta = baseMeta[p];
+          if (!meta) return true;
+          if (
+            typeof meta.size !== "number" &&
+            typeof meta.mtimeMs !== "number" &&
+            !meta.mtimeIso &&
+            !meta.type
+          ) {
+            return true;
+          }
+          return false;
+        });
+        if (!missing.length) return;
+
+        const result = await window.electronAPI.getFileMetadata(missing);
         if (cancelled) return;
-        const map = {};
+        if (!Array.isArray(result) || !result.length) return;
+        const currentState = usePlayerStore.getState();
+        const base =
+          currentState.fileMetadata &&
+          typeof currentState.fileMetadata === "object"
+            ? currentState.fileMetadata
+            : {};
+        const next = { ...base };
         (result || []).forEach((item) => {
           if (item && item.path) {
-            map[item.path] = item;
+            const prevMeta = next[item.path] || {};
+            next[item.path] = { ...prevMeta, ...item };
           }
         });
-        setFileMetadata(map);
+        setFileMetadata(next);
       } catch (e) {
         console.warn("Failed to load file metadata:", e);
       }
@@ -452,6 +575,45 @@ export default function AudioPlayer() {
       cancelled = true;
     };
   }, [files]);
+
+  useEffect(() => {
+    if (
+      !window.electronAPI ||
+      typeof window.electronAPI.onFilesMetadataDelta !== "function"
+    ) {
+      return;
+    }
+
+    const unsubscribe = window.electronAPI.onFilesMetadataDelta((items) => {
+      if (!Array.isArray(items) || !items.length) return;
+      const state = usePlayerStore.getState();
+      const base =
+        state.fileMetadata && typeof state.fileMetadata === "object"
+          ? state.fileMetadata
+          : {};
+      const next = { ...base };
+      const filesList = Array.isArray(state.files) ? state.files : [];
+      const filesSet = new Set(filesList);
+      let changed = false;
+      (items || []).forEach((item) => {
+        if (!item || !item.path || !filesSet.has(item.path)) return;
+        const prevMeta = next[item.path] || {};
+        next[item.path] = { ...prevMeta, ...item };
+        changed = true;
+      });
+      if (changed) {
+        state.setFileMetadata(next);
+      }
+    });
+
+    return () => {
+      if (typeof unsubscribe === "function") {
+        try {
+          unsubscribe();
+        } catch (e) {}
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (
@@ -635,6 +797,19 @@ export default function AudioPlayer() {
 
     const list = await window.electronAPI.readAudioFiles(folder);
     setCurrentFolderPath(folder || null);
+    if (
+      window.electronAPI &&
+      typeof window.electronAPI.watchFolder === "function"
+    ) {
+      try {
+        await window.electronAPI.watchFolder(folder);
+        hasFolderWatchRef.current = true;
+      } catch (e) {
+        hasFolderWatchRef.current = false;
+      }
+    } else {
+      hasFolderWatchRef.current = false;
+    }
     await preloadMetadataForInitialSort(list);
     setFiles(list || []);
 
@@ -659,6 +834,15 @@ export default function AudioPlayer() {
     ) {
       return;
     }
+    if (
+      window.electronAPI &&
+      typeof window.electronAPI.unwatchFolder === "function"
+    ) {
+      try {
+        await window.electronAPI.unwatchFolder();
+      } catch (e) {}
+    }
+    hasFolderWatchRef.current = false;
     const hadFiles = Array.isArray(files) && files.length > 0;
 
     let selected;
@@ -845,6 +1029,32 @@ export default function AudioPlayer() {
             currentLoadRef.current.url = null;
           }
           setIsLoaded(true);
+          
+          // Apply saved playback settings
+          const storeState = usePlayerStore.getState();
+          try {
+            // Apply playback speed
+            if (wsNow.setPlaybackRate && storeState.playbackSpeed) {
+              wsNow.setPlaybackRate(storeState.playbackSpeed);
+            }
+            
+            const mediaElement = wsNow.getMediaElement?.();
+            if (mediaElement) {
+              // Apply pitch preservation setting
+              const shouldPreservePitch = storeState.preservePitch;
+              mediaElement.preservesPitch = shouldPreservePitch;
+              mediaElement.mozPreservesPitch = shouldPreservePitch;
+              mediaElement.webkitPreservesPitch = shouldPreservePitch;
+              
+              // Apply audio output device
+              if (storeState.audioOutputDevice && typeof mediaElement.setSinkId === "function") {
+                mediaElement.setSinkId(storeState.audioOutputDevice).catch(() => {});
+              }
+            } else if (storeState.audioOutputDevice && typeof wsNow.setSinkId === "function") {
+              wsNow.setSinkId(storeState.audioOutputDevice).catch(() => {});
+            }
+          } catch (e) {}
+          
           if (autoPlay && wsNow && typeof wsNow.play === "function") {
             try {
               wsNow.play();
@@ -1076,6 +1286,131 @@ export default function AudioPlayer() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [files, currentIndex, duration, time, nudgeAmount]);
+
+  useEffect(() => {
+    if (
+      !window.electronAPI ||
+      typeof window.electronAPI.onFolderFilesDelta !== "function"
+    ) {
+      return;
+    }
+
+    const unsubscribe = window.electronAPI.onFolderFilesDelta((payload) => {
+      if (!payload || !payload.folderPath) return;
+      const { folderPath, added, removed } = payload;
+      if (!currentFolderPath || folderPath !== currentFolderPath) return;
+
+      const state = usePlayerStore.getState();
+      const prevFiles = Array.isArray(state.files) ? state.files : [];
+      const addedList = Array.isArray(added) ? added : [];
+      const removedList = Array.isArray(removed) ? removed : [];
+      if (!addedList.length && !removedList.length) return;
+
+      const removedSet = new Set(removedList.filter(Boolean));
+      const nextFiles = prevFiles.filter((p) => p && !removedSet.has(p));
+
+      addedList.forEach((p) => {
+        if (p && nextFiles.indexOf(p) === -1) {
+          nextFiles.push(p);
+        }
+      });
+
+      const prevCurrentIdx = state.currentIndex;
+      const prevSelectedIdx = state.selectedIndex;
+      const prevCurrentPath =
+        prevCurrentIdx >= 0 && prevCurrentIdx < prevFiles.length
+          ? prevFiles[prevCurrentIdx]
+          : null;
+      const prevSelectedPath =
+        prevSelectedIdx >= 0 && prevSelectedIdx < prevFiles.length
+          ? prevFiles[prevSelectedIdx]
+          : null;
+
+      const indexByPath = new Map();
+      nextFiles.forEach((p, idx) => {
+        indexByPath.set(p, idx);
+      });
+
+      let nextCurrentIndex = -1;
+      let nextSelectedIndex = -1;
+      if (prevCurrentPath && indexByPath.has(prevCurrentPath)) {
+        nextCurrentIndex = indexByPath.get(prevCurrentPath);
+      }
+      if (prevSelectedPath && indexByPath.has(prevSelectedPath)) {
+        nextSelectedIndex = indexByPath.get(prevSelectedPath);
+      }
+
+      // Clear ffprobe attempts for new files so durations get probed
+      if (addedList.length && ffprobeAttemptsRef.current) {
+        const attempts = ffprobeAttemptsRef.current;
+        addedList.forEach((p) => {
+          if (p && attempts[p]) {
+            delete attempts[p];
+          }
+        });
+      }
+
+      state.setFiles(nextFiles);
+      state.setCurrentIndex(nextCurrentIndex);
+      state.setSelectedIndex(nextSelectedIndex);
+
+      // Explicitly fetch metadata and durations for newly added files
+      if (
+        addedList.length &&
+        window.electronAPI &&
+        typeof window.electronAPI.getFileMetadata === "function"
+      ) {
+        window.electronAPI.getFileMetadata(addedList).then((result) => {
+          if (!Array.isArray(result) || !result.length) return;
+          const currentState = usePlayerStore.getState();
+          const base =
+            currentState.fileMetadata &&
+            typeof currentState.fileMetadata === "object"
+              ? currentState.fileMetadata
+              : {};
+          const next = { ...base };
+          result.forEach((item) => {
+            if (item && item.path) {
+              next[item.path] = { ...(next[item.path] || {}), ...item };
+            }
+          });
+          currentState.setFileMetadata(next);
+        }).catch(() => {});
+      }
+
+      if (
+        addedList.length &&
+        window.electronAPI &&
+        typeof window.electronAPI.probeDurationsForFiles === "function"
+      ) {
+        window.electronAPI.probeDurationsForFiles(addedList).then((result) => {
+          if (!Array.isArray(result)) return;
+          const map = { ...(durationsRef.current || {}) };
+          result.forEach((item) => {
+            if (
+              item &&
+              item.path &&
+              typeof item.duration === "number" &&
+              Number.isFinite(item.duration) &&
+              item.duration > 0
+            ) {
+              map[item.path] = item.duration;
+            }
+          });
+          durationsRef.current = map;
+          usePlayerStore.getState().setDurations({ ...map });
+        }).catch(() => {});
+      }
+    });
+
+    return () => {
+      if (typeof unsubscribe === "function") {
+        try {
+          unsubscribe();
+        } catch (e) {}
+      }
+    };
+  }, [currentFolderPath]);
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator))

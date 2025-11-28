@@ -6,12 +6,14 @@ const {
   Menu,
   globalShortcut,
   nativeImage,
+  shell,
 } = require("electron");
 const { webUtils } = require("electron");
 const path = require("node:path");
 const fs = require("fs").promises;
 const { spawn } = require("child_process");
 const { Level } = require("level");
+const chokidar = require("chokidar");
 
 const AUDIO_EXTENSIONS = new Set([
   ".mp3",
@@ -34,6 +36,97 @@ const AUDIO_EXTENSIONS = new Set([
   ".dsf",
   ".dff",
 ]);
+
+let folderWatcher = null;
+let folderWatcherPath = null;
+let folderWatcherWebContents = null;
+let folderDeltaAdded = new Set();
+let folderDeltaRemoved = new Set();
+let folderDeltaTimeout = null;
+let metadataPendingPaths = new Set();
+let metadataTimeout = null;
+
+function stopFolderWatcher() {
+  if (folderWatcher) {
+    try {
+      folderWatcher.close();
+    } catch (e) {}
+    folderWatcher = null;
+  }
+  folderWatcherPath = null;
+  folderWatcherWebContents = null;
+  folderDeltaAdded = new Set();
+  folderDeltaRemoved = new Set();
+  if (folderDeltaTimeout) {
+    clearTimeout(folderDeltaTimeout);
+    folderDeltaTimeout = null;
+  }
+  metadataPendingPaths = new Set();
+  if (metadataTimeout) {
+    clearTimeout(metadataTimeout);
+    metadataTimeout = null;
+  }
+}
+
+function scheduleFolderDeltaFlush() {
+  if (!folderWatcherWebContents) return;
+  if (folderDeltaTimeout) return;
+  folderDeltaTimeout = setTimeout(() => {
+    folderDeltaTimeout = null;
+    const added = Array.from(folderDeltaAdded);
+    const removed = Array.from(folderDeltaRemoved);
+    folderDeltaAdded = new Set();
+    folderDeltaRemoved = new Set();
+    if (!folderWatcherWebContents) return;
+    if (!added.length && !removed.length) return;
+    try {
+      folderWatcherWebContents.send("folder:filesDelta", {
+        folderPath: folderWatcherPath,
+        added,
+        removed,
+      });
+    } catch (e) {
+      console.warn("Failed to send folder:filesDelta:", e);
+    }
+  }, 200);
+}
+
+function scheduleMetadataFlush() {
+  if (!folderWatcherWebContents) return;
+  if (metadataTimeout) return;
+  metadataTimeout = setTimeout(async () => {
+    const paths = Array.from(metadataPendingPaths);
+    metadataPendingPaths = new Set();
+    metadataTimeout = null;
+    if (!folderWatcherWebContents) return;
+    if (!paths.length) return;
+    const items = [];
+    for (const p of paths) {
+      try {
+        const st = await fs.stat(p);
+        const ext = path.extname(p).toLowerCase();
+        const meta = {
+          path: p,
+          size: typeof st.size === "number" ? st.size : null,
+          mtimeMs: typeof st.mtimeMs === "number" ? st.mtimeMs : null,
+          mtimeIso: st.mtime.toISOString(),
+          type: ext || null,
+        };
+        items.push(meta);
+        try {
+          await upsertTrackMetadata(meta);
+        } catch (e) {}
+      } catch (e) {}
+    }
+    if (!items.length) return;
+    if (!folderWatcherWebContents) return;
+    try {
+      folderWatcherWebContents.send("files:metadataDelta", items);
+    } catch (e) {
+      console.warn("Failed to send files:metadataDelta:", e);
+    }
+  }, 300);
+}
 
 async function collectAudioFiles(dir) {
   let results = [];
@@ -137,6 +230,75 @@ ipcMain.handle("files:readAudio", async (_event, folderPath) => {
     console.error("Error reading audio files:", err);
     return [];
   }
+});
+
+ipcMain.handle("folder:watch", async (event, folderPath) => {
+  if (!folderPath || typeof folderPath !== "string") {
+    stopFolderWatcher();
+    return null;
+  }
+  try {
+    const st = await fs.stat(folderPath);
+    if (!st.isDirectory()) {
+      return null;
+    }
+  } catch (e) {
+    console.warn("folder:watch stat failed:", e);
+    return null;
+  }
+  if (
+    folderWatcher &&
+    folderWatcherPath === folderPath &&
+    folderWatcherWebContents === event.sender
+  ) {
+    return null;
+  }
+  stopFolderWatcher();
+  folderWatcherWebContents = event.sender;
+  folderWatcherPath = folderPath;
+  folderWatcher = chokidar.watch(folderPath, {
+    persistent: true,
+    ignoreInitial: true,
+    depth: Infinity,
+    awaitWriteFinish: {
+      stabilityThreshold: 300,
+      pollInterval: 100,
+    },
+  });
+  const handleAdd = (p) => {
+    const ext = path.extname(p).toLowerCase();
+    if (!AUDIO_EXTENSIONS.has(ext)) return;
+    folderDeltaAdded.add(p);
+    folderDeltaRemoved.delete(p);
+    scheduleFolderDeltaFlush();
+    metadataPendingPaths.add(p);
+    scheduleMetadataFlush();
+  };
+  const handleUnlink = (p) => {
+    const ext = path.extname(p).toLowerCase();
+    if (!AUDIO_EXTENSIONS.has(ext)) return;
+    folderDeltaRemoved.add(p);
+    folderDeltaAdded.delete(p);
+    scheduleFolderDeltaFlush();
+  };
+  const handleChange = (p) => {
+    const ext = path.extname(p).toLowerCase();
+    if (!AUDIO_EXTENSIONS.has(ext)) return;
+    metadataPendingPaths.add(p);
+    scheduleMetadataFlush();
+  };
+  folderWatcher.on("add", handleAdd);
+  folderWatcher.on("unlink", handleUnlink);
+  folderWatcher.on("change", handleChange);
+  folderWatcher.on("error", (err) => {
+    console.error("folder watcher error:", err);
+  });
+  return null;
+});
+
+ipcMain.handle("folder:unwatch", async () => {
+  stopFolderWatcher();
+  return null;
 });
 
 ipcMain.handle("file:processFromBytes", async (_event, fileName, fileBytes) => {
@@ -337,6 +499,11 @@ ipcMain.handle("window:maximize", (event) => {
 ipcMain.handle("window:close", (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (win) win.close();
+});
+
+ipcMain.handle("shell:openExternal", async (_event, url) => {
+  if (!url || typeof url !== "string") return;
+  await shell.openExternal(url);
 });
 
 ipcMain.handle("file:decodeToWav", async (_event, filePath) => {
@@ -881,6 +1048,7 @@ app.on("will-quit", () => {
 });
 
 app.on("window-all-closed", () => {
+  stopFolderWatcher();
   if (process.platform !== "darwin") {
     app.quit();
   }
