@@ -1,15 +1,30 @@
+import React from 'react';
 import AudioPlayer from './components/AudioPlayer';
+import TitleBar from './components/TitleBar';
+import Settings from './components/Settings';
+import usePlayerStore from './store/usePlayerStore';
 
 function App() {
+  const isSettingsOpen = usePlayerStore((state) => state.isSettingsOpen);
+  const openSettings = usePlayerStore((state) => state.openSettings);
+  const closeSettings = usePlayerStore((state) => state.closeSettings);
+
+  const handleSettingsClick = () => {
+    openSettings();
+  };
+
+  const handleSettingsClose = () => {
+    closeSettings();
+  };
+
   return (
-    <div className="app-root h-screen" >
-      <div className="titlebar" aria-hidden="true" />
-      <div className="bg-gray-900 rounded-lg shadow-2xl p-6 h-full flex flex-col">
-          <h1 className="text-3xl font-bold text-gray-100 mb-4 text-center">Audinspect</h1>
-          <AudioPlayer />
-        </div>
+    <div className="app-root h-screen bg-pure-black text-white flex flex-col overflow-hidden">
+      <TitleBar onSettingsClick={handleSettingsClick} />
+      <AudioPlayer />
+      <Settings isOpen={isSettingsOpen} onClose={handleSettingsClose} />
     </div>
   );
 }
 
 export default App;
+
