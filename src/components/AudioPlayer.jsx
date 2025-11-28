@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import WaveSurfer from "wavesurfer.js";
+import Hover from "wavesurfer.js/dist/plugins/hover.esm.js";
 import Toast from "./Toast";
 import DropConfirmModal from "./DropConfirmModal";
 import PlayerArea from "./PlayerArea";
@@ -22,6 +23,8 @@ export default function AudioPlayer() {
   const originalNamesRef = useRef({});
   const timeDisplayRef = useRef(null);
   const dragTimeoutRef = useRef(null);
+  const hoverPluginRef = useRef(null);
+  const hopFnRef = useRef(() => {});
 
   const {
     files,
@@ -61,6 +64,10 @@ export default function AudioPlayer() {
     setDragTarget,
     showToast,
     hideToast,
+    nudgeAmount,
+    playbackSpeed,
+    wavesurferTheme,
+    wavesurferShowHover,
   } = usePlayerStore();
 
   useEffect(() => {
@@ -97,33 +104,83 @@ export default function AudioPlayer() {
         if (typeof fn === "function") {
           try {
             fn();
-          } catch (e) { }
+          } catch (e) {}
         }
       });
     };
   }, [files, currentIndex, isLoaded]);
 
   const createWaveSurfer = () => {
+    const accentColor =
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--accent-color")
+        .trim() || "#0050ff";
 
-    const accentColor = getComputedStyle(document.documentElement)
-      .getPropertyValue('--accent-color')
-      .trim() || '#0050ff';
-    
+    // Theme configurations
+    const themes = {
+      precision: {
+        waveColor: "#333333",
+        progressColor: accentColor,
+        height: 250,
+        barWidth: 0,
+        barGap: 0,
+        barRadius: 0,
+      },
+      prettiness: {
+        waveColor: "#444444",
+        progressColor: accentColor,
+        height: 250,
+        barWidth: 3,
+        barGap: 2,
+        barRadius: 3,
+      },
+      minimal: {
+        waveColor: "#2a2a2a",
+        progressColor: accentColor,
+        height: 250,
+        barWidth: 4,
+        barGap: 2,
+        barRadius: 0,
+      },
+    };
+
+    const themeConfig = themes[wavesurferTheme] || themes.precision;
+
     const inst = WaveSurfer.create({
       container: containerRef.current,
-      waveColor: "#333333",
-      progressColor: accentColor,
+      ...themeConfig,
       cursorColor: "#ffffff",
-      height: 250,
       normalize: true,
       responsive: true,
       backend: "WebAudio",
-      barWidth: 2,
-      barGap: 1,
-      barRadius: 0,
       interact: true,
       hideScrollbar: true,
     });
+
+    // REGISTER hover plugin if enabled
+    if (wavesurferShowHover) {
+      try {
+        hoverPluginRef.current = Hover.create({
+          lineColor: "#ffffff",
+          lineWidth: 1,
+          labelBackground: "rgba(0,0,0,0.7)",
+          labelColor: "#ffffff",
+          labelSize: "11px",
+          hideLabel: false,
+          formatTimeCallback: (t) => {
+            const m = Math.floor(t / 60);
+            const s = Math.floor(t % 60)
+              .toString()
+              .padStart(2, "0");
+            return `${m}:${s}`;
+          },
+        });
+        inst.registerPlugin(hoverPluginRef.current);
+      } catch (e) {
+        console.warn("Failed to register hover plugin:", e);
+        hoverPluginRef.current = null;
+      }
+    }
 
     inst.on("interaction", () => {
       if (inst.isPlaying()) inst.play();
@@ -135,15 +192,11 @@ export default function AudioPlayer() {
         if (timeDisplayRef.current) {
           const m = Math.floor(currentTime / 60);
           const s = Math.floor(currentTime % 60);
-          timeDisplayRef.current.textContent = `${m}:${s.toString().padStart(2, "0")}`;
+          timeDisplayRef.current.textContent = `${m}:${s
+            .toString()
+            .padStart(2, "0")}`;
         }
-
-        const playing = inst.isPlaying();
-        if (isPlayingRef.current !== playing) {
-          isPlayingRef.current = playing;
-          setIsPlaying(playing);
-        }
-      } catch (e) { }
+      } catch (e) {}
     });
     inst.on("finish", () => {
       isPlayingRef.current = false;
@@ -156,14 +209,17 @@ export default function AudioPlayer() {
         if (timeDisplayRef.current) {
           const m = Math.floor(currentTime / 60);
           const s = Math.floor(currentTime % 60);
-          timeDisplayRef.current.textContent = `${m}:${s.toString().padStart(2, "0")}`;
+          timeDisplayRef.current.textContent = `${m}:${s
+            .toString()
+            .padStart(2, "0")}`;
         }
-      } catch (e) { }
+      } catch (e) {}
     });
 
     try {
       inst.setVolume && inst.setVolume(volume / 100);
-    } catch (e) { }
+      inst.setPlaybackRate && inst.setPlaybackRate(playbackSpeed);
+    } catch (e) {}
     wsRef.current = inst;
     return inst;
   };
@@ -172,38 +228,92 @@ export default function AudioPlayer() {
     if (wsRef.current && typeof wsRef.current.setVolume === "function") {
       try {
         wsRef.current.setVolume(volume / 100);
-      } catch (e) { }
+      } catch (e) {}
     }
   }, [volume]);
+
+  // Update playback speed when it changes
+  useEffect(() => {
+    if (wsRef.current && typeof wsRef.current.setPlaybackRate === "function") {
+      try {
+        const ws = wsRef.current;
+        const wasPlaying = ws.isPlaying && ws.isPlaying();
+        const prevTime = ws.getCurrentTime ? ws.getCurrentTime() : 0;
+        const dur = ws.getDuration ? ws.getDuration() : 0;
+
+        ws.setPlaybackRate(playbackSpeed);
+
+        // Force re-seek to the same absolute time (protect against internal rounding glitches)
+        if (dur > 0 && prevTime >= 0 && prevTime <= dur) {
+          const fraction = Math.min(Math.max(prevTime / dur, 0), 1);
+          // Use requestAnimationFrame to allow internal nodes to settle before seeking
+          requestAnimationFrame(() => {
+            try {
+              ws.seekTo(fraction);
+              // If it was playing, resume to avoid a tiny pause artifact
+              if (wasPlaying) ws.play();
+            } catch (e) {}
+          });
+        }
+      } catch (e) {
+        console.warn("Failed to adjust playback rate:", e);
+      }
+    }
+  }, [playbackSpeed]);
+
+  // Update wavesurfer when theme changes
+  useEffect(() => {
+    if (wsRef.current) {
+      // Recreate wavesurfer with new theme
+      const wasPlaying = isPlaying;
+      const currentTime = wsRef.current.getCurrentTime
+        ? wsRef.current.getCurrentTime()
+        : 0;
+
+      try {
+        wsRef.current.destroy();
+      } catch (e) {}
+
+      createWaveSurfer();
+
+      // Reload current file if there was one
+      if (files && files.length > 0 && currentIndex >= 0) {
+        loadAtIndex(currentIndex, files, { autoPlay: wasPlaying }).then(() => {
+          if (wsRef.current && currentTime > 0) {
+            const dur = wsRef.current.getDuration();
+            if (dur) wsRef.current.seekTo(currentTime / dur);
+          }
+        });
+      }
+    }
+  }, [wavesurferTheme, wavesurferShowHover]);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
       if (wsRef.current) {
-        const accentColor = getComputedStyle(document.documentElement)
-          .getPropertyValue('--accent-color')
-          .trim() || '#0050ff';
+        const accentColor =
+          getComputedStyle(document.documentElement)
+            .getPropertyValue("--accent-color")
+            .trim() || "#0050ff";
         try {
           wsRef.current.setOptions({ progressColor: accentColor });
         } catch (e) {
-          console.warn('Failed to update WaveSurfer color:', e);
+          console.warn("Failed to update WaveSurfer color:", e);
         }
       }
     });
 
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['style']
+      attributeFilter: ["style"],
     });
 
     return () => observer.disconnect();
   }, []);
   useEffect(() => {
-
     createWaveSurfer();
     const container = containerRef.current;
     const onResize = () => {
-
-
       return;
     };
     window.addEventListener("resize", onResize);
@@ -216,20 +326,17 @@ export default function AudioPlayer() {
 
     const el = containerRef.current;
     const onWheel = (e) => {
-
       const dx = e.deltaX || (e.shiftKey ? e.deltaY : 0);
       if (!dx) return;
-
       e.preventDefault();
-
-      const THRESHOLD = 100; // tune this for sensitivity
+      const THRESHOLD = 100;
       wheelAccRef.current += dx;
       while (wheelAccRef.current <= -THRESHOLD) {
-        hop(1.5);
+        hopFnRef.current(1);
         wheelAccRef.current += THRESHOLD;
       }
       while (wheelAccRef.current >= THRESHOLD) {
-        hop(-1.5);
+        hopFnRef.current(-1);
         wheelAccRef.current -= THRESHOLD;
       }
     };
@@ -248,51 +355,45 @@ export default function AudioPlayer() {
       ) {
         try {
           currentLoadRef.current.cleanup();
-        } catch (e) { }
+        } catch (e) {}
         currentLoadRef.current.cleanup = null;
         currentLoadRef.current.url = null;
       }
       if (wsRef.current) {
         try {
           wsRef.current.destroy();
-        } catch (e) { }
+        } catch (e) {}
         wsRef.current = null;
       }
     };
-
   }, []);
 
-  useEffect(
-    () => {
-      if (
-        window.electronAPI &&
-        typeof window.electronAPI.onFilesLoaded === "function"
-      ) {
-        const unsub = window.electronAPI.onFilesLoaded((list) => {
-          setFiles(list || []);
-          if (list && list.length) {
-            const rows = getVisibleRows(list);
-            if (rows && rows.length) {
-              loadAtIndex(rows[0].idx, list, { autoPlay: false });
-            }
+  useEffect(() => {
+    if (
+      window.electronAPI &&
+      typeof window.electronAPI.onFilesLoaded === "function"
+    ) {
+      const unsub = window.electronAPI.onFilesLoaded((list) => {
+        setFiles(list || []);
+        if (list && list.length) {
+          const rows = getVisibleRows(list);
+          if (rows && rows.length) {
+            loadAtIndex(rows[0].idx, list, { autoPlay: false });
           }
-        });
-        return () => unsub && unsub();
-      }
+        }
+      });
+      return () => unsub && unsub();
+    }
 
-      return undefined;
-    },
-    [
-      
-    ],
-  );
+    return undefined;
+  }, []);
 
   useEffect(() => {
     const loadLastFolder = async () => {
-      const rememberLastFolder = localStorage.getItem('rememberLastFolder');
-      const lastFolder = localStorage.getItem('lastOpenedFolder');
-      
-      if (rememberLastFolder === 'true' && lastFolder && window.electronAPI) {
+      const rememberLastFolder = localStorage.getItem("rememberLastFolder");
+      const lastFolder = localStorage.getItem("lastOpenedFolder");
+
+      if (rememberLastFolder === "true" && lastFolder && window.electronAPI) {
         try {
           const list = await window.electronAPI.readAudioFiles(lastFolder);
           if (list && list.length > 0) {
@@ -305,18 +406,21 @@ export default function AudioPlayer() {
             }
           }
         } catch (err) {
-          console.warn('Failed to load last folder:', err);
+          console.warn("Failed to load last folder:", err);
 
-          localStorage.removeItem('lastOpenedFolder');
+          localStorage.removeItem("lastOpenedFolder");
         }
       }
     };
-    
+
     loadLastFolder();
   }, []);
 
   useEffect(() => {
-    if (!window.electronAPI || typeof window.electronAPI.getFileMetadata !== "function") {
+    if (
+      !window.electronAPI ||
+      typeof window.electronAPI.getFileMetadata !== "function"
+    ) {
       return;
     }
     let cancelled = false;
@@ -338,7 +442,7 @@ export default function AudioPlayer() {
         });
         setFileMetadata(map);
       } catch (e) {
-        console.warn('Failed to load file metadata:', e);
+        console.warn("Failed to load file metadata:", e);
       }
     };
 
@@ -350,7 +454,10 @@ export default function AudioPlayer() {
   }, [files]);
 
   useEffect(() => {
-    if (!window.electronAPI || typeof window.electronAPI.onProbeDurationsProgress !== "function") {
+    if (
+      !window.electronAPI ||
+      typeof window.electronAPI.onProbeDurationsProgress !== "function"
+    ) {
       return;
     }
 
@@ -366,7 +473,9 @@ export default function AudioPlayer() {
 
         const baseList = Array.isArray(files) ? files : [];
         const currentPath =
-          currentIndex >= 0 && baseList[currentIndex] ? baseList[currentIndex] : null;
+          currentIndex >= 0 && baseList[currentIndex]
+            ? baseList[currentIndex]
+            : null;
         if (
           currentPath === p &&
           (!duration || !Number.isFinite(duration) || duration <= 0)
@@ -381,13 +490,16 @@ export default function AudioPlayer() {
       if (typeof unsubscribe === "function") {
         try {
           unsubscribe();
-        } catch (e) { }
+        } catch (e) {}
       }
     };
   }, [files, currentIndex, duration]);
 
   useEffect(() => {
-    if (!window.electronAPI || typeof window.electronAPI.probeDurationsForFiles !== "function") {
+    if (
+      !window.electronAPI ||
+      typeof window.electronAPI.probeDurationsForFiles !== "function"
+    ) {
       return;
     }
 
@@ -429,7 +541,9 @@ export default function AudioPlayer() {
         ffprobeAttemptsRef.current = updatedAttempts;
 
         const currentPath =
-          currentIndex >= 0 && baseList[currentIndex] ? baseList[currentIndex] : null;
+          currentIndex >= 0 && baseList[currentIndex]
+            ? baseList[currentIndex]
+            : null;
         if (
           currentPath &&
           map[currentPath] &&
@@ -437,7 +551,7 @@ export default function AudioPlayer() {
         ) {
           setDuration(map[currentPath]);
         }
-      } catch (e) { }
+      } catch (e) {}
     };
 
     run();
@@ -447,13 +561,15 @@ export default function AudioPlayer() {
     };
   }, [files, currentIndex, duration]);
 
-
   const handleSearchChange = (value) => {
     setSearchQuery(value);
   };
 
   const preloadMetadataForInitialSort = async (paths) => {
-    if (!window.electronAPI || typeof window.electronAPI.getFileMetadata !== "function") {
+    if (
+      !window.electronAPI ||
+      typeof window.electronAPI.getFileMetadata !== "function"
+    ) {
       return;
     }
     const state = usePlayerStore.getState();
@@ -472,7 +588,7 @@ export default function AudioPlayer() {
         }
       });
       setFileMetadata(map);
-    } catch (e) { }
+    } catch (e) {}
   };
 
   async function handleOpenFolder() {
@@ -496,10 +612,10 @@ export default function AudioPlayer() {
       if (wsRef.current) {
         try {
           wsRef.current.pause && wsRef.current.pause();
-        } catch (e) { }
+        } catch (e) {}
         try {
           wsRef.current.destroy();
-        } catch (e) { }
+        } catch (e) {}
         wsRef.current = null;
       }
 
@@ -509,12 +625,12 @@ export default function AudioPlayer() {
       ) {
         try {
           currentLoadRef.current.cleanup();
-        } catch (e) { }
+        } catch (e) {}
         currentLoadRef.current.cleanup = null;
         currentLoadRef.current.url = null;
       }
     } catch (e) {
-      console.warn('Error while clearing previous files:', e);
+      console.warn("Error while clearing previous files:", e);
     }
 
     const list = await window.electronAPI.readAudioFiles(folder);
@@ -522,10 +638,10 @@ export default function AudioPlayer() {
     await preloadMetadataForInitialSort(list);
     setFiles(list || []);
 
-    if (localStorage.getItem('rememberLastFolder') === 'true') {
-      localStorage.setItem('lastOpenedFolder', folder);
+    if (localStorage.getItem("rememberLastFolder") === "true") {
+      localStorage.setItem("lastOpenedFolder", folder);
     }
-    
+
     if (!list || list.length === 0) {
       showToast("no supported audio files found in selected folder");
       return;
@@ -537,7 +653,10 @@ export default function AudioPlayer() {
   }
 
   async function handleOpenFile() {
-    if (!window.electronAPI || typeof window.electronAPI.openFiles !== "function") {
+    if (
+      !window.electronAPI ||
+      typeof window.electronAPI.openFiles !== "function"
+    ) {
       return;
     }
     const hadFiles = Array.isArray(files) && files.length > 0;
@@ -553,7 +672,27 @@ export default function AudioPlayer() {
     const paths = selected.filter((p) => typeof p === "string" && p.trim());
     if (!paths.length) return;
 
-    const AUDIO_EXTS = new Set([".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg"]);
+    const AUDIO_EXTS = new Set([
+      ".mp3",
+      ".wav",
+      ".flac",
+      ".m4a",
+      ".aac",
+      ".ogg",
+      ".oga",
+      ".opus",
+      ".aiff",
+      ".aif",
+      ".wma",
+      ".ac3",
+      ".dts",
+      ".amr",
+      ".ape",
+      ".wv",
+      ".spx",
+      ".dsf",
+      ".dff",
+    ]);
     const valid = [];
     const invalid = [];
 
@@ -592,10 +731,10 @@ export default function AudioPlayer() {
       if (wsRef.current) {
         try {
           wsRef.current.pause && wsRef.current.pause();
-        } catch (e) { }
+        } catch (e) {}
         try {
           wsRef.current.destroy();
-        } catch (e) { }
+        } catch (e) {}
         wsRef.current = null;
       }
 
@@ -605,7 +744,7 @@ export default function AudioPlayer() {
       ) {
         try {
           currentLoadRef.current.cleanup();
-        } catch (e) { }
+        } catch (e) {}
         currentLoadRef.current.cleanup = null;
         currentLoadRef.current.url = null;
       }
@@ -645,23 +784,19 @@ export default function AudioPlayer() {
     ) {
       try {
         currentLoadRef.current.cleanup();
-      } catch (e) { }
+      } catch (e) {}
       currentLoadRef.current.cleanup = null;
       currentLoadRef.current.url = null;
     }
 
-
-
     if (wsRef.current) {
       try {
         wsRef.current.pause && wsRef.current.pause();
-      } catch (e) { }
+      } catch (e) {}
       try {
-
         wsRef.current.empty && wsRef.current.empty();
-      } catch (e) { }
+      } catch (e) {}
     } else {
-
       createWaveSurfer();
     }
 
@@ -687,8 +822,6 @@ export default function AudioPlayer() {
 
       if (myToken !== loadTokenRef.current) return;
 
-
-
       const attachReadyHandler = (onReady) => {
         const handleReady = () => {
           if (myToken !== loadTokenRef.current) return;
@@ -703,12 +836,12 @@ export default function AudioPlayer() {
           try {
             if (wsNow.seekTo) wsNow.seekTo(0);
             else if (wsNow.setCurrentTime) wsNow.setCurrentTime(0);
-          } catch (e) { }
+          } catch (e) {}
           setTime(0);
           if (currentLoadRef.current && currentLoadRef.current.url) {
             try {
               URL.revokeObjectURL(currentLoadRef.current.url);
-            } catch (e) { }
+            } catch (e) {}
             currentLoadRef.current.url = null;
           }
           setIsLoaded(true);
@@ -734,11 +867,11 @@ export default function AudioPlayer() {
                 ? wsRef.current.un("ready", handleReady)
                 : wsRef.current.off && wsRef.current.off("ready", handleReady);
             }
-          } catch (e) { }
+          } catch (e) {}
           if (currentLoadRef.current && currentLoadRef.current.url) {
             try {
               URL.revokeObjectURL(currentLoadRef.current.url);
-            } catch (e) { }
+            } catch (e) {}
             currentLoadRef.current.url = null;
           }
         };
@@ -749,7 +882,7 @@ export default function AudioPlayer() {
         const handleError = (err) => {
           try {
             onError && onError(err);
-          } catch (e) { }
+          } catch (e) {}
         };
         currentLoadRef.current.errorCleanup = () => {
           try {
@@ -758,7 +891,7 @@ export default function AudioPlayer() {
                 ? wsRef.current.un("error", handleError)
                 : wsRef.current.off && wsRef.current.off("error", handleError);
             }
-          } catch (e) { }
+          } catch (e) {}
         };
         wsRef.current.once && wsRef.current.once("error", handleError);
       };
@@ -768,7 +901,6 @@ export default function AudioPlayer() {
           if (wsRef.current.loadArrayBuffer) {
             attachReadyHandler();
             attachErrorHandler(async () => {
-
               await doFfmpegFallback();
             });
             await wsRef.current.loadArrayBuffer(buf);
@@ -823,7 +955,12 @@ export default function AudioPlayer() {
 
           return true;
         } catch (e) {
-          console.error(`WaveSurfer load error (${isFallback ? 'fallback attempt' : 'initial attempt'}), will try fallback:`, e);
+          console.error(
+            `WaveSurfer load error (${
+              isFallback ? "fallback attempt" : "initial attempt"
+            }), will try fallback:`,
+            e
+          );
           return false;
         }
       };
@@ -842,7 +979,8 @@ export default function AudioPlayer() {
             const decodedArrayBuffer = toArrayBuffer(decoded.data);
             await loadAudioData(decodedArrayBuffer, true);
           } else {
-            const errorMsg = decoded && decoded.error ? decoded.error : "Unknown error";
+            const errorMsg =
+              decoded && decoded.error ? decoded.error : "Unknown error";
             console.error("ffmpeg decode returned no data or error:", errorMsg);
             const name = (filePath || "").split(/[\/\\]/).pop();
             const label = name ? `: ${name}` : "";
@@ -857,22 +995,18 @@ export default function AudioPlayer() {
         }
       };
 
-
-
-
-
       attachErrorHandler(async () => {
-
         console.warn("WaveSurfer emitted error event, triggering fallback...");
         await doFfmpegFallback();
       });
 
-
-      const NATIVE_SUPPORTED_EXTS = new Set(['.wav', '.mp3', '.flac', '.ogg']);
-      const ext = filePath.toLowerCase().slice(filePath.lastIndexOf('.'));
+      const NATIVE_SUPPORTED_EXTS = new Set([".wav", ".mp3", ".flac", ".ogg"]);
+      const ext = filePath.toLowerCase().slice(filePath.lastIndexOf("."));
 
       if (!NATIVE_SUPPORTED_EXTS.has(ext)) {
-        console.log(`File extension ${ext} not in native whitelist, forcing FFmpeg decoding...`);
+        console.log(
+          `File extension ${ext} not in native whitelist, forcing FFmpeg decoding...`
+        );
         await doFfmpegFallback();
         return;
       }
@@ -880,26 +1014,23 @@ export default function AudioPlayer() {
       const wavesurferLoadSuccessful = await loadAudioData(arrayBuffer);
 
       if (!wavesurferLoadSuccessful) {
-
-
         console.warn("loadAudioData returned false, triggering fallback...");
         await doFfmpegFallback();
       }
-
     } catch (err) {
       console.error("Failed to load file via main:", err);
     }
   }
 
-  function hop(delta) {
+  function hop(direction) {
     const ws = wsRef.current;
     if (!ws) return;
-    const t = ws.getCurrentTime ? ws.getCurrentTime() : time;
-    const dur = ws.getDuration ? ws.getDuration() : duration;
-    let nt = (t || 0) + delta;
+    const t = ws.getCurrentTime ? ws.getCurrentTime() : time || 0;
+    const dur = ws.getDuration ? ws.getDuration() : duration || 0;
+    let nt = t + direction * nudgeAmount; // use nudgeAmount directly
     if (nt < 0) nt = 0;
     if (dur && nt > dur) nt = dur;
-    if (dur) ws.seekTo(nt / dur);
+    if (dur && ws.seekTo) ws.seekTo(nt / dur);
     else if (ws.setCurrentTime) ws.setCurrentTime(nt);
   }
 
@@ -913,6 +1044,10 @@ export default function AudioPlayer() {
   }
 
   useEffect(() => {
+    hopFnRef.current = hop;
+  }, [hop]);
+
+  useEffect(() => {
     function onKey(e) {
       if (
         e.target &&
@@ -923,10 +1058,10 @@ export default function AudioPlayer() {
         return;
       if (e.key === "ArrowLeft") {
         e.preventDefault();
-        hop(-1.5);
+        hop(-1); // was -1.5
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
-        hop(1.5);
+        hop(1); // was 1.5
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         prev();
@@ -940,18 +1075,19 @@ export default function AudioPlayer() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-
-  }, [files, currentIndex, duration, time]);
+  }, [files, currentIndex, duration, time, nudgeAmount]);
 
   useEffect(() => {
-    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator))
+      return;
     const ms = navigator.mediaSession;
 
-    const filePath = currentIndex >= 0 && files[currentIndex] ? files[currentIndex] : null;
+    const filePath =
+      currentIndex >= 0 && files[currentIndex] ? files[currentIndex] : null;
     if (!filePath) {
       try {
         ms.metadata = null;
-      } catch (e) { }
+      } catch (e) {}
       return;
     }
 
@@ -964,37 +1100,46 @@ export default function AudioPlayer() {
       ms.metadata = new MediaMetadata({
         title: name,
       });
-    } catch (e) { }
+    } catch (e) {}
   }, [files, currentIndex]);
 
   useEffect(() => {
-    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator))
+      return;
     const ms = navigator.mediaSession;
 
     try {
       if (!isLoaded) {
         ms.playbackState = "none";
-        if (window.electronAPI && typeof window.electronAPI.updatePlaybackState === "function") {
+        if (
+          window.electronAPI &&
+          typeof window.electronAPI.updatePlaybackState === "function"
+        ) {
           try {
             window.electronAPI.updatePlaybackState(false);
-          } catch (e) { }
+          } catch (e) {}
         }
         return;
       }
       ms.playbackState = isPlaying ? "playing" : "paused";
-    } catch (e) { }
-    if (window.electronAPI && typeof window.electronAPI.updatePlaybackState === "function") {
+    } catch (e) {}
+    if (
+      window.electronAPI &&
+      typeof window.electronAPI.updatePlaybackState === "function"
+    ) {
       try {
         window.electronAPI.updatePlaybackState(!!(isLoaded && isPlaying));
-      } catch (e) { }
+      } catch (e) {}
     }
   }, [isLoaded, isPlaying]);
 
   useEffect(() => {
-    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator))
+      return;
     const ms = navigator.mediaSession;
 
-    if (!isLoaded || !duration || typeof ms.setPositionState !== "function") return;
+    if (!isLoaded || !duration || typeof ms.setPositionState !== "function")
+      return;
 
     const safeDuration = Number.isFinite(duration) ? duration : 0;
     const pos = Math.max(0, Math.min(safeDuration || 0, time || 0));
@@ -1004,11 +1149,12 @@ export default function AudioPlayer() {
         duration: safeDuration,
         position: pos,
       });
-    } catch (e) { }
+    } catch (e) {}
   }, [time, duration, isLoaded]);
 
   useEffect(() => {
-    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator))
+      return;
     const ms = navigator.mediaSession;
 
     try {
@@ -1041,7 +1187,7 @@ export default function AudioPlayer() {
           wsRef.current.seekTo(nt / dur);
         }
       });
-    } catch (e) { }
+    } catch (e) {}
 
     return () => {
       try {
@@ -1051,7 +1197,7 @@ export default function AudioPlayer() {
         ms.setActionHandler("nexttrack", null);
         ms.setActionHandler("previoustrack", null);
         ms.setActionHandler("seekto", null);
-      } catch (e) { }
+      } catch (e) {}
     };
   }, [files, currentIndex, isLoaded, duration]);
 
@@ -1083,11 +1229,15 @@ export default function AudioPlayer() {
         if (mode === "none" || mode === "name" || mode === "nameDesc") {
           const na = (getDisplayName(fa) || "").toLowerCase();
           const nb = (getDisplayName(fb) || "").toLowerCase();
-          return mode === "nameDesc" ? nb.localeCompare(na) : na.localeCompare(nb);
+          return mode === "nameDesc"
+            ? nb.localeCompare(na)
+            : na.localeCompare(nb);
         }
         if (mode === "length" || mode === "lengthDesc") {
-          const la = typeof durationsMap[fa] === "number" ? durationsMap[fa] : Infinity;
-          const lb = typeof durationsMap[fb] === "number" ? durationsMap[fb] : Infinity;
+          const la =
+            typeof durationsMap[fa] === "number" ? durationsMap[fa] : Infinity;
+          const lb =
+            typeof durationsMap[fb] === "number" ? durationsMap[fb] : Infinity;
           if (la !== lb) return mode === "lengthDesc" ? lb - la : la - lb;
           const na = (getDisplayName(fa) || "").toLowerCase();
           const nb = (getDisplayName(fb) || "").toLowerCase();
@@ -1097,11 +1247,23 @@ export default function AudioPlayer() {
           const ma = fileMetadataMap[fa];
           const mb = fileMetadataMap[fb];
           const ta =
-            ma && (typeof ma.mtimeMs === "number" ? ma.mtimeMs : ma.mtimeIso ? Date.parse(ma.mtimeIso) : 0);
+            ma &&
+            (typeof ma.mtimeMs === "number"
+              ? ma.mtimeMs
+              : ma.mtimeIso
+              ? Date.parse(ma.mtimeIso)
+              : 0);
           const tb =
-            mb && (typeof mb.mtimeMs === "number" ? mb.mtimeMs : mb.mtimeIso ? Date.parse(mb.mtimeIso) : 0);
+            mb &&
+            (typeof mb.mtimeMs === "number"
+              ? mb.mtimeMs
+              : mb.mtimeIso
+              ? Date.parse(mb.mtimeIso)
+              : 0);
           if (ta !== tb) {
-            return mode === "date" ? (tb || 0) - (ta || 0) : (ta || 0) - (tb || 0);
+            return mode === "date"
+              ? (tb || 0) - (ta || 0)
+              : (ta || 0) - (tb || 0);
           }
           const na = (getDisplayName(fa) || "").toLowerCase();
           const nb = (getDisplayName(fb) || "").toLowerCase();
@@ -1215,11 +1377,9 @@ export default function AudioPlayer() {
     let nextFiles;
 
     if (!base.length || currentIndex < 0 || currentIndex >= base.length) {
-
       indexToPlay = base.length;
       nextFiles = [...base, ...valid.map((f) => f.path)];
     } else {
-
       base[currentIndex] = first.path;
       rest.forEach((f) => {
         base.push(f.path);
@@ -1230,7 +1390,11 @@ export default function AudioPlayer() {
     setFiles(nextFiles);
 
     if (nextFiles && nextFiles.length) {
-      if (indexToPlay == null || indexToPlay < 0 || indexToPlay >= nextFiles.length) {
+      if (
+        indexToPlay == null ||
+        indexToPlay < 0 ||
+        indexToPlay >= nextFiles.length
+      ) {
         indexToPlay = 0;
       }
       loadAtIndex(indexToPlay, nextFiles);
@@ -1274,7 +1438,9 @@ export default function AudioPlayer() {
       setDropConfirm(null);
       return;
     }
-    appendFilesToPlaylist(dropConfirm.files, { autoPlayIfEmpty: !files || files.length === 0 });
+    appendFilesToPlaylist(dropConfirm.files, {
+      autoPlayIfEmpty: !files || files.length === 0,
+    });
     setDropConfirm(null);
   };
 
@@ -1310,7 +1476,6 @@ export default function AudioPlayer() {
     e.preventDefault();
     e.stopPropagation();
 
-
     if (e.currentTarget === e.target) {
       setIsDragging(false);
       setDragTarget(null);
@@ -1345,7 +1510,10 @@ export default function AudioPlayer() {
         try {
           const arrayBuffer = await f.arrayBuffer();
           const uint8Array = new Uint8Array(arrayBuffer);
-          const tempPath = await window.electronAPI.processFromBytes(f.name, uint8Array);
+          const tempPath = await window.electronAPI.processFromBytes(
+            f.name,
+            uint8Array
+          );
           return { path: tempPath, name: f.name };
         } catch (err) {
           console.warn(`Failed to process ${f.name}:`, err);
@@ -1354,8 +1522,8 @@ export default function AudioPlayer() {
       })
     );
 
-    const validFiles = filePaths.filter(f => f && f.path);
-    const invalidFiles = filePaths.filter(f => !f || !f.path);
+    const validFiles = filePaths.filter((f) => f && f.path);
+    const invalidFiles = filePaths.filter((f) => !f || !f.path);
     if (invalidFiles.length) {
       const count = invalidFiles.length;
       showToast(`${count} unsupported file${count > 1 ? "s" : ""} skipped`);
@@ -1371,7 +1539,9 @@ export default function AudioPlayer() {
       return;
     }
 
-    appendFilesToPlaylist(validFiles, { autoPlayIfEmpty: !files || files.length === 0 });
+    appendFilesToPlaylist(validFiles, {
+      autoPlayIfEmpty: !files || files.length === 0,
+    });
   };
 
   const handleDeleteTrack = (idx) => {
@@ -1381,7 +1551,7 @@ export default function AudioPlayer() {
       if (wsRef.current) {
         try {
           wsRef.current.pause && wsRef.current.pause();
-        } catch (e) { }
+        } catch (e) {}
         wsRef.current.empty && wsRef.current.empty();
       }
       isPlayingRef.current = false;
@@ -1393,7 +1563,7 @@ export default function AudioPlayer() {
       ) {
         try {
           currentLoadRef.current.cleanup();
-        } catch (e) { }
+        } catch (e) {}
         currentLoadRef.current.cleanup = null;
         currentLoadRef.current.url = null;
       }
@@ -1451,6 +1621,7 @@ export default function AudioPlayer() {
         handleWaveMouseUp={handleWaveMouseUp}
         handleWaveMouseLeave={handleWaveMouseLeave}
         timeDisplayRef={timeDisplayRef}
+        nudgeAmount={nudgeAmount}
       />
 
       <PlaylistArea
@@ -1480,4 +1651,3 @@ export default function AudioPlayer() {
     </div>
   );
 }
-

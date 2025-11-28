@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { List } from "react-window";
-import { Search, FolderOpen, CircleX } from "lucide-react";
-import { formatTime, formatBytes, formatFileType, formatDateFromMeta } from "../utils/formatters";
+import { Search, File, Folder, CircleX, ChevronDown } from "lucide-react";
+import {
+  formatTime,
+  formatBytes,
+  formatFileType,
+  formatDateFromMeta,
+} from "../utils/formatters";
 
 export default function PlaylistArea({
   playlistAreaRef,
@@ -27,8 +32,6 @@ export default function PlaylistArea({
   onDragLeave,
   onDrop,
 }) {
-  const [openMenu, setOpenMenu] = useState(false);
-
   const pairs = files.map((f, idx) => ({ f, idx }));
   const q = (searchQuery || "").toLowerCase().trim();
   const filtered = q
@@ -43,10 +46,16 @@ export default function PlaylistArea({
     rows = [...filtered].sort((a, b) => {
       const fa = a.f;
       const fb = b.f;
-      if (sortMode === "none" || sortMode === "name" || sortMode === "nameDesc") {
+      if (
+        sortMode === "none" ||
+        sortMode === "name" ||
+        sortMode === "nameDesc"
+      ) {
         const na = (getDisplayName(fa) || "").toLowerCase();
         const nb = (getDisplayName(fb) || "").toLowerCase();
-        return sortMode === "nameDesc" ? nb.localeCompare(na) : na.localeCompare(nb);
+        return sortMode === "nameDesc"
+          ? nb.localeCompare(na)
+          : na.localeCompare(nb);
       }
       if (sortMode === "length" || sortMode === "lengthDesc") {
         const la = typeof durations[fa] === "number" ? durations[fa] : Infinity;
@@ -59,10 +68,24 @@ export default function PlaylistArea({
       if (sortMode === "date" || sortMode === "dateOldest") {
         const ma = fileMetadata[fa];
         const mb = fileMetadata[fb];
-        const ta = ma && (typeof ma.mtimeMs === "number" ? ma.mtimeMs : ma.mtimeIso ? Date.parse(ma.mtimeIso) : 0);
-        const tb = mb && (typeof mb.mtimeMs === "number" ? mb.mtimeMs : mb.mtimeIso ? Date.parse(mb.mtimeIso) : 0);
+        const ta =
+          ma &&
+          (typeof ma.mtimeMs === "number"
+            ? ma.mtimeMs
+            : ma.mtimeIso
+            ? Date.parse(ma.mtimeIso)
+            : 0);
+        const tb =
+          mb &&
+          (typeof mb.mtimeMs === "number"
+            ? mb.mtimeMs
+            : mb.mtimeIso
+            ? Date.parse(mb.mtimeIso)
+            : 0);
         if (ta !== tb) {
-          return sortMode === "date" ? (tb || 0) - (ta || 0) : (ta || 0) - (tb || 0);
+          return sortMode === "date"
+            ? (tb || 0) - (ta || 0)
+            : (ta || 0) - (tb || 0);
         }
         const na = (getDisplayName(fa) || "").toLowerCase();
         const nb = (getDisplayName(fb) || "").toLowerCase();
@@ -112,12 +135,16 @@ export default function PlaylistArea({
               } rounded-full flex-shrink-0`}
             />
             <div className="flex items-center justify-between gap-4 flex-1 min-w-0">
-              <div className="truncate text-white text-sm">{getDisplayName(f)}</div>
+              <div className="truncate text-white text-sm">
+                {getDisplayName(f)}
+              </div>
               <div className="ml-4 text-[11px] text-white/40 text-right flex-shrink-0 max-w-[50%]">
                 {(() => {
                   const meta = fileMetadata && fileMetadata[f];
                   const lengthSec =
-                    durations && typeof durations[f] === "number" ? durations[f] : null;
+                    durations && typeof durations[f] === "number"
+                      ? durations[f]
+                      : null;
                   const pieces = [];
                   if (lengthSec != null) {
                     pieces.push(formatTime(lengthSec));
@@ -176,7 +203,9 @@ export default function PlaylistArea({
           className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none"
           style={{
             backgroundColor: `${
-              getComputedStyle(document.documentElement).getPropertyValue("--accent-color").trim() || "#0050ff"
+              getComputedStyle(document.documentElement)
+                .getPropertyValue("--accent-color")
+                .trim() || "#0050ff"
             }33`,
           }}
         >
@@ -184,11 +213,17 @@ export default function PlaylistArea({
             className="bg-pure-black border-2 p-48"
             style={{
               borderColor:
-                getComputedStyle(document.documentElement).getPropertyValue("--accent-color").trim() || "#0050ff",
+                getComputedStyle(document.documentElement)
+                  .getPropertyValue("--accent-color")
+                  .trim() || "#0050ff",
             }}
           >
-            <div className="text-2xl font-bold text-white text-center">drop audio files here</div>
-            <div className="text-sm text-white/60 text-center mt-8">supports folders and multiple files</div>
+            <div className="text-2xl font-bold text-white text-center">
+              drop audio files here
+            </div>
+            <div className="text-sm text-white/60 text-center mt-8">
+              supports folders and multiple files
+            </div>
           </div>
         </div>
       )}
@@ -197,7 +232,8 @@ export default function PlaylistArea({
           <div className="flex items-center gap-16">
             <h3 className="font-bold text-white text-lg">
               {currentFolderPath
-                ? currentFolderPath.split(/[\\/]/).filter(Boolean).pop() || "playlist"
+                ? currentFolderPath.split(/[\\/]/).filter(Boolean).pop() ||
+                  "playlist"
                 : "playlist"}
             </h3>
             <span className="text-xs font-mono text-white/60 bg-white/10 px-8 py-4">
@@ -205,63 +241,61 @@ export default function PlaylistArea({
             </span>
           </div>
           <div className="flex items-center gap-8">
-            <div className="relative">
-              <span className="absolute left-8 top-1/2 -translate-y-1/2 text-white/60">
-                <Search size={16} strokeWidth={2} />
-              </span>
+            <div className="flex items-center gap-8 bg-pure-black border-2 border-white focus-within:border-[var(--accent-color)] transition-all px-3 py-8">
+              <Search size={16} strokeWidth={2} className="text-white/60" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
                 placeholder="search..."
-                className="pl-32 pr-16 py-8 text-sm bg-pure-black text-white border-2 border-white focus:border-[var(--accent-color)] focus:outline-none transition-all"
+                className="flex-1 bg-transparent text-sm text-white focus:outline-none"
               />
             </div>
-            <select
-              value={sortMode}
-              onChange={(e) => setSortMode(e.target.value)}
-              className="bg-pure-black text-white border-2 border-white text-xs px-8 py-[0.6rem] no-drag"
-            >
-              <option value="none">name (A–Z)</option>
-              <option value="nameDesc">name (Z–A)</option>
-              <option value="length">length (short → long)</option>
-              <option value="lengthDesc">length (long → short)</option>
-              <option value="date">last modified (newest)</option>
-              <option value="dateOldest">last modified (oldest)</option>
-            </select>
             <div className="relative">
+              <select
+                value={sortMode}
+                onChange={(e) => setSortMode(e.target.value)}
+                className="bg-pure-black text-white border-2 border-white text-xs w-[165px] px-[8px] py-[0.6rem] no-drag appearance-none focus:outline-none focus:border-[var(--accent-color)] transition-all"
+              >
+                <option value="none">name (A–Z)</option>
+                <option value="nameDesc">name (Z–A)</option>
+                <option value="length">length (short → long)</option>
+                <option value="lengthDesc">length (long → short)</option>
+                <option value="date">last modified (newest)</option>
+                <option value="dateOldest">last modified (oldest)</option>
+              </select>
+              <ChevronDown
+                size={14}
+                strokeWidth={2}
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/70"
+              />
+            </div>
+            <div className="relative group">
               <button
-                onClick={() => setOpenMenu((prev) => !prev)}
                 title="Open files or folder"
-                className="bg-[var(--accent-color)] border-2 border-[var(--accent-color)] hover:bg-white hover:text-[var(--accent-color)] text-white px-16 py-8 transition-all duration-200 no-drag flex items-center gap-8"
+                className="w-[85px] bg-[var(--accent-color)] border-2 border-[var(--accent-color)] hover:bg-white hover:text-[var(--accent-color)] text-white px-4 py-8 transition-all duration-200 no-drag flex items-center gap-8 group-hover:opacity-0 group-hover:invisible justify-center"
                 aria-label="Open files or folder"
               >
-                <FolderOpen size={16} strokeWidth={2} />
-                open
-                <span className="text-[10px]">▼</span>
+                Open
               </button>
-              {openMenu && (
-                <div className="absolute right-0 mt-4 w-40 bg-pure-black border-2 border-white shadow-lg z-20">
-                  <button
-                    className="w-full text-left px-[0.6rem] py-8 text-sm text-white hover:bg-white hover:text-pure-black"
-                    onClick={() => {
-                      setOpenMenu(false);
-                      handleOpenFile && handleOpenFile();
-                    }}
-                  >
-                    open file
-                  </button>
-                  <button
-                    className="w-full text-left px-[0.6rem] py-8 text-sm text-white hover:bg-white hover:text-pure-black border-t border-white/20"
-                    onClick={() => {
-                      setOpenMenu(false);
-                      handleOpenFolder && handleOpenFolder();
-                    }}
-                  >
-                    open folder
-                  </button>
-                </div>
-              )}
+              <div className="absolute inset-0 flex border-2 border-[var(--accent-color)] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                <button
+                  onClick={() => handleOpenFile && handleOpenFile()}
+                  title="Open file"
+                  className="bg-[var(--accent-color)] hover:bg-white hover:text-[var(--accent-color)] text-white py-8 transition-all duration-200 no-drag flex items-center justify-center border-r border-[var(--accent-color)] flex-1"
+                  aria-label="Open file"
+                >
+                  <File size={16} strokeWidth={2} />
+                </button>
+                <button
+                  onClick={() => handleOpenFolder && handleOpenFolder()}
+                  title="Open folder"
+                  className="bg-[var(--accent-color)] hover:bg-white hover:text-[var(--accent-color)] text-white py-8 transition-all duration-200 no-drag flex items-center justify-center flex-1"
+                  aria-label="Open folder"
+                >
+                  <Folder size={16} strokeWidth={2} />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -270,8 +304,12 @@ export default function PlaylistArea({
       <div className="flex-1 overflow-hidden">
         {files.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-32">
-            <div className="text-lg font-semibold text-white/60 mb-8">no files loaded</div>
-            <div className="text-sm text-white/40">drag and drop audio files or click open folder</div>
+            <div className="text-lg font-semibold text-white/60 mb-8">
+              No files loaded
+            </div>
+            <div className="text-sm text-white/40">
+              Drag and drop audio files or click open folder
+            </div>
           </div>
         ) : (
           <List

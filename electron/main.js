@@ -1,11 +1,39 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, globalShortcut, nativeImage } = require('electron');
-const { webUtils } = require('electron');
-const path = require('node:path');
-const fs = require('fs').promises;
-const { spawn } = require('child_process');
-const { Level } = require('level');
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  Menu,
+  globalShortcut,
+  nativeImage,
+} = require("electron");
+const { webUtils } = require("electron");
+const path = require("node:path");
+const fs = require("fs").promises;
+const { spawn } = require("child_process");
+const { Level } = require("level");
 
-const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg']);
+const AUDIO_EXTENSIONS = new Set([
+  ".mp3",
+  ".wav",
+  ".flac",
+  ".m4a",
+  ".aac",
+  ".ogg",
+  ".oga",
+  ".opus",
+  ".aiff",
+  ".aif",
+  ".wma",
+  ".ac3",
+  ".dts",
+  ".amr",
+  ".ape",
+  ".wv",
+  ".spx",
+  ".dsf",
+  ".dff",
+]);
 
 async function collectAudioFiles(dir) {
   let results = [];
@@ -26,8 +54,8 @@ async function collectAudioFiles(dir) {
 }
 
 function createWindow() {
-  const isMac = process.platform === 'darwin';
-  
+  const isMac = process.platform === "darwin";
+
   const mainWindow = new BrowserWindow({
     width: 1000,
     height: 800,
@@ -36,79 +64,82 @@ function createWindow() {
     frame: false,
     // On macOS, use hiddenInset to get native traffic light buttons
     ...(isMac && {
-      titleBarStyle: 'hiddenInset',
-      trafficLightPosition: { x: 16, y: 7 },
+      titleBarStyle: "hiddenInset",
+      trafficLightPosition: { x: 12, y: 7 },
     }),
-    icon: path.join(__dirname, '../resources/icon.png'),
+    icon: path.join(__dirname, "../resources/icon.png"),
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,
       contextIsolation: true,
     },
   });
 
-
-
   if (!app.isPackaged) {
-    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.loadURL("http://localhost:5173");
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
   }
 
   // Track fullscreen state for macOS traffic light spacer
-  mainWindow.on('enter-full-screen', () => {
-    mainWindow.webContents.send('window:fullscreen-change', true);
+  mainWindow.on("enter-full-screen", () => {
+    mainWindow.webContents.send("window:fullscreen-change", true);
   });
-  mainWindow.on('leave-full-screen', () => {
-    mainWindow.webContents.send('window:fullscreen-change', false);
+  mainWindow.on("leave-full-screen", () => {
+    mainWindow.webContents.send("window:fullscreen-change", false);
   });
 
   return mainWindow;
 }
 
 async function openFolderAndSend(win) {
-  const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
-  if (result.canceled || !result.filePaths || result.filePaths.length === 0) return;
+  const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+  if (result.canceled || !result.filePaths || result.filePaths.length === 0)
+    return;
   const folder = result.filePaths[0];
   try {
     const files = await collectAudioFiles(folder);
-    win.webContents.send('files:loaded', files);
+    win.webContents.send("files:loaded", files);
   } catch (err) {
-    console.error('Failed to collect audio files from folder:', err);
-    win.webContents.send('files:loaded', []);
+    console.error("Failed to collect audio files from folder:", err);
+    win.webContents.send("files:loaded", []);
   }
 }
 
-ipcMain.handle('dialog:openFolder', async () => {
-  const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
+ipcMain.handle("dialog:openFolder", async () => {
+  const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
   if (result.canceled) return null;
   return result.filePaths[0] || null;
 });
 
-ipcMain.handle('dialog:openFiles', async () => {
+ipcMain.handle("dialog:openFiles", async () => {
   const result = await dialog.showOpenDialog({
-    properties: ['openFile', 'multiSelections'],
+    properties: ["openFile", "multiSelections"],
     filters: [
-      { name: 'Audio Files', extensions: ['mp3', 'wav', 'flac', 'm4a', 'aac', 'ogg'] },
+      {
+        name: "Audio Files",
+        extensions: ["mp3", "wav", "flac", "m4a", "aac", "ogg"],
+      },
     ],
   });
-  if (result.canceled || !result.filePaths || result.filePaths.length === 0) return [];
+  if (result.canceled || !result.filePaths || result.filePaths.length === 0)
+    return [];
   return result.filePaths;
 });
 
-ipcMain.handle('files:readAudio', async (_event, folderPath) => {
+ipcMain.handle("files:readAudio", async (_event, folderPath) => {
   if (!folderPath) return [];
   try {
     const files = await collectAudioFiles(folderPath);
     return files;
   } catch (err) {
-    console.error('Error reading audio files:', err);
+    console.error("Error reading audio files:", err);
     return [];
   }
 });
 
-ipcMain.handle('file:processFromBytes', async (_event, fileName, fileBytes) => {
+ipcMain.handle("file:processFromBytes", async (_event, fileName, fileBytes) => {
   try {
     const ext = path.extname(fileName).toLowerCase();
     if (!AUDIO_EXTENSIONS.has(ext)) {
@@ -116,7 +147,7 @@ ipcMain.handle('file:processFromBytes', async (_event, fileName, fileBytes) => {
       return null;
     }
 
-    const tempDir = require('os').tmpdir();
+    const tempDir = require("os").tmpdir();
     const tempPath = path.join(tempDir, `audinspect_${Date.now()}_${fileName}`);
 
     await fs.writeFile(tempPath, Buffer.from(fileBytes));
@@ -129,26 +160,26 @@ ipcMain.handle('file:processFromBytes', async (_event, fileName, fileBytes) => {
     await fs.unlink(tempPath).catch(() => {});
     return null;
   } catch (err) {
-    console.error('Failed to process file from bytes:', err);
+    console.error("Failed to process file from bytes:", err);
     return null;
   }
 });
 
-ipcMain.handle('file:getPath', async (_event, fileRef) => {
+ipcMain.handle("file:getPath", async (_event, fileRef) => {
   try {
     const filePath = webUtils.getPathForFile(fileRef);
     return filePath;
   } catch (err) {
-    console.error('Failed to get file path:', err);
+    console.error("Failed to get file path:", err);
     return null;
   }
 });
 
-ipcMain.handle('files:scanPaths', async (_event, paths) => {
+ipcMain.handle("files:scanPaths", async (_event, paths) => {
   if (!paths || !Array.isArray(paths)) return [];
   const normalizedPaths = paths
     .filter((raw) => {
-      if (!raw || typeof raw !== 'string') {
+      if (!raw || typeof raw !== "string") {
         console.warn(`Invalid path value received in files:scanPaths:`, raw);
         return false;
       }
@@ -186,14 +217,16 @@ ipcMain.handle('files:scanPaths', async (_event, paths) => {
 
     return [...new Set(allResults)];
   } catch (err) {
-    console.error('Error scanning paths:', err);
+    console.error("Error scanning paths:", err);
     return [];
   }
 });
 
-ipcMain.handle('files:getMetadata', async (_event, paths) => {
+ipcMain.handle("files:getMetadata", async (_event, paths) => {
   if (!paths || !Array.isArray(paths)) return [];
-  const uniquePaths = [...new Set(paths.filter((p) => typeof p === 'string' && p.trim()))];
+  const uniquePaths = [
+    ...new Set(paths.filter((p) => typeof p === "string" && p.trim())),
+  ];
   if (!uniquePaths.length) return [];
 
   const results = [];
@@ -209,7 +242,7 @@ ipcMain.handle('files:getMetadata', async (_event, paths) => {
         type: ext || null,
       });
     } catch (e) {
-      console.warn('Failed to stat for metadata:', p, e);
+      console.warn("Failed to stat for metadata:", p, e);
       results.push({ path: p });
     }
   }
@@ -217,7 +250,7 @@ ipcMain.handle('files:getMetadata', async (_event, paths) => {
   return results;
 });
 
-ipcMain.handle('files:list', async (_event, folderPath) => {
+ipcMain.handle("files:list", async (_event, folderPath) => {
   if (!folderPath) return [];
   try {
     const entries = await fs.readdir(folderPath, { withFileTypes: true });
@@ -228,12 +261,12 @@ ipcMain.handle('files:list', async (_event, folderPath) => {
       isFile: e.isFile(),
     }));
   } catch (err) {
-    console.error('Error listing folder:', err);
+    console.error("Error listing folder:", err);
     return [];
   }
 });
 
-ipcMain.handle('files:traverse', async (_event, folderPath) => {
+ipcMain.handle("files:traverse", async (_event, folderPath) => {
   if (!folderPath) return null;
   async function build(dir) {
     const entries = await fs.readdir(dir, { withFileTypes: true });
@@ -242,13 +275,23 @@ ipcMain.handle('files:traverse', async (_event, folderPath) => {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         const children = await build(fullPath);
-        result.push({ name: entry.name, path: fullPath, type: 'directory', children });
+        result.push({
+          name: entry.name,
+          path: fullPath,
+          type: "directory",
+          children,
+        });
       } else if (entry.isFile()) {
         try {
           const st = await fs.stat(fullPath);
-          result.push({ name: entry.name, path: fullPath, type: 'file', size: st.size });
+          result.push({
+            name: entry.name,
+            path: fullPath,
+            type: "file",
+            size: st.size,
+          });
         } catch (e) {
-          result.push({ name: entry.name, path: fullPath, type: 'file' });
+          result.push({ name: entry.name, path: fullPath, type: "file" });
         }
       }
     }
@@ -259,28 +302,28 @@ ipcMain.handle('files:traverse', async (_event, folderPath) => {
     const tree = await build(folderPath);
     return tree;
   } catch (err) {
-    console.error('Error traversing folder:', err);
+    console.error("Error traversing folder:", err);
     return null;
   }
 });
 
-ipcMain.handle('file:read', async (_event, filePath) => {
+ipcMain.handle("file:read", async (_event, filePath) => {
   if (!filePath) return null;
   try {
     const data = await fs.readFile(filePath);
     return data;
   } catch (err) {
-    console.error('Error reading file:', err);
+    console.error("Error reading file:", err);
     return null;
   }
 });
 
-ipcMain.handle('window:minimize', (event) => {
+ipcMain.handle("window:minimize", (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (win) win.minimize();
 });
 
-ipcMain.handle('window:maximize', (event) => {
+ipcMain.handle("window:maximize", (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (win) {
     if (win.isMaximized()) {
@@ -291,78 +334,103 @@ ipcMain.handle('window:maximize', (event) => {
   }
 });
 
-ipcMain.handle('window:close', (event) => {
+ipcMain.handle("window:close", (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (win) win.close();
 });
 
-
-ipcMain.handle('file:decodeToWav', async (_event, filePath) => {
+ipcMain.handle("file:decodeToWav", async (_event, filePath) => {
   if (!filePath) return null;
-
 
   let ffmpegPath;
   try {
-    ffmpegPath = require('ffmpeg-static');
+    ffmpegPath = require("ffmpeg-static");
 
-    console.log('FFmpeg path from require:', ffmpegPath);
-    console.log('App is packaged:', app.isPackaged);
-    console.log('Process resources path:', process.resourcesPath);
-
+    console.log("FFmpeg path from require:", ffmpegPath);
+    console.log("App is packaged:", app.isPackaged);
+    console.log("Process resources path:", process.resourcesPath);
 
     if (app.isPackaged) {
-      if (ffmpegPath && ffmpegPath.includes('app.asar')) {
-
-        ffmpegPath = ffmpegPath.replace(/app\.asar(?!\.unpacked)/, 'app.asar.unpacked');
-        console.log('Replaced app.asar with app.asar.unpacked:', ffmpegPath);
+      if (ffmpegPath && ffmpegPath.includes("app.asar")) {
+        ffmpegPath = ffmpegPath.replace(
+          /app\.asar(?!\.unpacked)/,
+          "app.asar.unpacked"
+        );
+        console.log("Replaced app.asar with app.asar.unpacked:", ffmpegPath);
       } else if (!ffmpegPath) {
-
         const platform = process.platform;
-        const ext = platform === 'win32' ? '.exe' : '';
+        const ext = platform === "win32" ? ".exe" : "";
         const binaryName = `ffmpeg${ext}`;
 
         const resourcesPath = process.resourcesPath;
-        ffmpegPath = path.join(resourcesPath, 'app.asar.unpacked', 'node_modules', 'ffmpeg-static', binaryName);
-        console.log('Manually constructed FFmpeg path:', ffmpegPath);
+        ffmpegPath = path.join(
+          resourcesPath,
+          "app.asar.unpacked",
+          "node_modules",
+          "ffmpeg-static",
+          binaryName
+        );
+        console.log("Manually constructed FFmpeg path:", ffmpegPath);
       }
     }
 
-    if (!ffmpegPath) throw new Error('ffmpeg-static returned null path and could not construct fallback');
+    if (!ffmpegPath)
+      throw new Error(
+        "ffmpeg-static returned null path and could not construct fallback"
+      );
 
-    console.log('Final FFmpeg path:', ffmpegPath);
+    console.log("Final FFmpeg path:", ffmpegPath);
   } catch (e) {
-    console.error('Failed to resolve ffmpeg-static path:', e);
-    return { data: null, error: `Failed to resolve ffmpeg path: ${e.message}`, code: null };
+    console.error("Failed to resolve ffmpeg-static path:", e);
+    return {
+      data: null,
+      error: `Failed to resolve ffmpeg path: ${e.message}`,
+      code: null,
+    };
   }
 
   return new Promise((resolve) => {
     try {
-      const args = ['-i', filePath, '-f', 'wav', '-'];
-      console.log(`Spawning ffmpeg: ${ffmpegPath} ${args.join(' ')}`);
+      const args = ["-i", filePath, "-f", "wav", "-"];
+      console.log(`Spawning ffmpeg: ${ffmpegPath} ${args.join(" ")}`);
 
-      const ff = spawn(ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      const ff = spawn(ffmpegPath, args, { stdio: ["ignore", "pipe", "pipe"] });
       const chunks = [];
-      ff.stdout.on('data', (c) => chunks.push(c));
-      let errBuf = '';
-      ff.stderr.on('data', (d) => { errBuf += d.toString(); });
+      ff.stdout.on("data", (c) => chunks.push(c));
+      let errBuf = "";
+      ff.stderr.on("data", (d) => {
+        errBuf += d.toString();
+      });
 
-      ff.on('close', (code) => {
+      ff.on("close", (code) => {
         if (code === 0) {
           const out = Buffer.concat(chunks);
           resolve({ data: out, error: null, code: 0 });
         } else {
-          console.error('ffmpeg failed:', code, errBuf);
-          resolve({ data: null, error: `ffmpeg failed (code ${code}): ${errBuf}`, code });
+          console.error("ffmpeg failed:", code, errBuf);
+          resolve({
+            data: null,
+            error: `ffmpeg failed (code ${code}): ${errBuf}`,
+            code,
+          });
         }
       });
 
-      ff.on('error', (e) => {
-        console.error('ffmpeg spawn error:', e);
-        resolve({ data: null, error: `ffmpeg spawn error: ${e.message}`, code: null });
+      ff.on("error", (e) => {
+        console.error("ffmpeg spawn error:", e);
+        resolve({
+          data: null,
+          error: `ffmpeg spawn error: ${e.message}`,
+          code: null,
+        });
       });
     } catch (e) {
-      console.error('Error running ffmpeg:', e);
-      resolve({ data: null, error: `Error running ffmpeg: ${e.message}`, code: null });
+      console.error("Error running ffmpeg:", e);
+      resolve({
+        data: null,
+        error: `Error running ffmpeg: ${e.message}`,
+        code: null,
+      });
     }
   });
 });
@@ -373,31 +441,37 @@ let metadataDb = null;
 function getFfprobePath() {
   if (cachedFfprobePath) return cachedFfprobePath;
 
-  const ffprobeStatic = require('ffprobe-static');
+  const ffprobeStatic = require("ffprobe-static");
   let ffprobePath =
-    ffprobeStatic && typeof ffprobeStatic === 'object' && ffprobeStatic.path
+    ffprobeStatic && typeof ffprobeStatic === "object" && ffprobeStatic.path
       ? ffprobeStatic.path
       : ffprobeStatic;
 
   if (app.isPackaged) {
-    if (ffprobePath && ffprobePath.includes('app.asar')) {
-      ffprobePath = ffprobePath.replace(/app\.asar(?!\.unpacked)/, 'app.asar.unpacked');
+    if (ffprobePath && ffprobePath.includes("app.asar")) {
+      ffprobePath = ffprobePath.replace(
+        /app\.asar(?!\.unpacked)/,
+        "app.asar.unpacked"
+      );
     } else if (!ffprobePath) {
       const platform = process.platform;
-      const ext = platform === 'win32' ? '.exe' : '';
+      const ext = platform === "win32" ? ".exe" : "";
       const binaryName = `ffprobe${ext}`;
       const resourcesPath = process.resourcesPath;
       ffprobePath = path.join(
         resourcesPath,
-        'app.asar.unpacked',
-        'node_modules',
-        'ffprobe-static',
-        binaryName,
+        "app.asar.unpacked",
+        "node_modules",
+        "ffprobe-static",
+        binaryName
       );
     }
   }
 
-  if (!ffprobePath) throw new Error('ffprobe-static returned null path and could not construct fallback');
+  if (!ffprobePath)
+    throw new Error(
+      "ffprobe-static returned null path and could not construct fallback"
+    );
 
   cachedFfprobePath = ffprobePath;
   return ffprobePath;
@@ -405,9 +479,9 @@ function getFfprobePath() {
 
 function getMetadataDb() {
   if (metadataDb) return metadataDb;
-  const userDataDir = app.getPath('userData');
-  const dbPath = path.join(userDataDir, 'audinspect-metadata');
-  metadataDb = new Level(dbPath, { valueEncoding: 'json' });
+  const userDataDir = app.getPath("userData");
+  const dbPath = path.join(userDataDir, "audinspect-metadata");
+  metadataDb = new Level(dbPath, { valueEncoding: "json" });
   return metadataDb;
 }
 
@@ -418,23 +492,39 @@ async function upsertTrackMetadata(data) {
   let existing = null;
   try {
     existing = await db.get(data.path);
-  } catch (e) {
-  }
+  } catch (e) {}
 
   const record = {
     path: data.path,
-    size: typeof data.size === 'number' ? data.size : (existing && typeof existing.size === 'number' ? existing.size : null),
-    mtimeMs: typeof data.mtimeMs === 'number' ? data.mtimeMs : (existing && typeof existing.mtimeMs === 'number' ? existing.mtimeMs : null),
+    size:
+      typeof data.size === "number"
+        ? data.size
+        : existing && typeof existing.size === "number"
+        ? existing.size
+        : null,
+    mtimeMs:
+      typeof data.mtimeMs === "number"
+        ? data.mtimeMs
+        : existing && typeof existing.mtimeMs === "number"
+        ? existing.mtimeMs
+        : null,
     type: data.type || (existing && existing.type ? existing.type : null),
-    duration: typeof data.duration === 'number' ? data.duration : (existing && typeof existing.duration === 'number' ? existing.duration : null),
-    createdAt: existing && typeof existing.createdAt === 'number' ? existing.createdAt : now,
+    duration:
+      typeof data.duration === "number"
+        ? data.duration
+        : existing && typeof existing.duration === "number"
+        ? existing.duration
+        : null,
+    createdAt:
+      existing && typeof existing.createdAt === "number"
+        ? existing.createdAt
+        : now,
     updatedAt: now,
   };
 
   try {
     await db.put(data.path, record);
-  } catch (e) {
-  }
+  } catch (e) {}
 }
 
 async function getCachedTrackMetadata(trackPath) {
@@ -452,76 +542,103 @@ function runFfprobeDuration(ffprobePath, filePath) {
   return new Promise((resolve) => {
     try {
       const args = [
-        '-v',
-        'error',
-        '-show_entries',
-        'format=duration',
-        '-of',
-        'default=noprint_wrappers=1:nokey=1',
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
         filePath,
       ];
 
-      const ff = spawn(ffprobePath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-      let out = '';
-      let errBuf = '';
+      const ff = spawn(ffprobePath, args, {
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let out = "";
+      let errBuf = "";
 
-      ff.stdout.on('data', (c) => {
+      ff.stdout.on("data", (c) => {
         out += c.toString();
       });
-      ff.stderr.on('data', (d) => {
+      ff.stderr.on("data", (d) => {
         errBuf += d.toString();
       });
 
-      ff.on('close', (code) => {
+      ff.on("close", (code) => {
         if (code === 0) {
-          const text = (out || '').trim().split(/\r?\n/).pop();
+          const text = (out || "").trim().split(/\r?\n/).pop();
           const dur = parseFloat(text);
           if (!Number.isFinite(dur) || dur <= 0) {
-            resolve({ duration: null, error: `ffprobe returned invalid duration: ${text}`, code: 0 });
+            resolve({
+              duration: null,
+              error: `ffprobe returned invalid duration: ${text}`,
+              code: 0,
+            });
           } else {
             resolve({ duration: dur, error: null, code: 0 });
           }
         } else {
-          console.error('ffprobe failed:', code, errBuf);
-          resolve({ duration: null, error: `ffprobe failed (code ${code}): ${errBuf}`, code });
+          console.error("ffprobe failed:", code, errBuf);
+          resolve({
+            duration: null,
+            error: `ffprobe failed (code ${code}): ${errBuf}`,
+            code,
+          });
         }
       });
 
-      ff.on('error', (e) => {
-        console.error('ffprobe spawn error:', e);
-        resolve({ duration: null, error: `ffprobe spawn error: ${e.message}`, code: null });
+      ff.on("error", (e) => {
+        console.error("ffprobe spawn error:", e);
+        resolve({
+          duration: null,
+          error: `ffprobe spawn error: ${e.message}`,
+          code: null,
+        });
       });
     } catch (e) {
-      console.error('Error running ffprobe:', e);
-      resolve({ duration: null, error: `Error running ffprobe: ${e.message}`, code: null });
+      console.error("Error running ffprobe:", e);
+      resolve({
+        duration: null,
+        error: `Error running ffprobe: ${e.message}`,
+        code: null,
+      });
     }
   });
 }
 
-ipcMain.handle('file:probeDuration', async (_event, filePath) => {
+ipcMain.handle("file:probeDuration", async (_event, filePath) => {
   if (!filePath) return null;
 
   let ffprobePath;
   try {
     ffprobePath = getFfprobePath();
   } catch (e) {
-    console.error('Failed to resolve ffprobe-static path:', e);
-    return { duration: null, error: `Failed to resolve ffprobe path: ${e.message}`, code: null };
+    console.error("Failed to resolve ffprobe-static path:", e);
+    return {
+      duration: null,
+      error: `Failed to resolve ffprobe path: ${e.message}`,
+      code: null,
+    };
   }
 
   return runFfprobeDuration(ffprobePath, filePath);
 });
 
-ipcMain.handle('files:probeDurations', async (event, paths) => {
+ipcMain.handle("files:probeDurations", async (event, paths) => {
   if (!paths || !Array.isArray(paths)) return [];
-  const uniquePaths = [...new Set(paths.filter((p) => typeof p === 'string' && p.trim()))];
+  const uniquePaths = [
+    ...new Set(paths.filter((p) => typeof p === "string" && p.trim())),
+  ];
   if (!uniquePaths.length) return [];
 
   let ffprobePath;
   try {
     ffprobePath = getFfprobePath();
   } catch (e) {
-    console.error('Failed to resolve ffprobe-static path in files:probeDurations:', e);
+    console.error(
+      "Failed to resolve ffprobe-static path in files:probeDurations:",
+      e
+    );
     return [];
   }
 
@@ -532,12 +649,11 @@ ipcMain.handle('files:probeDurations', async (event, paths) => {
     let type = null;
     try {
       const st = await fs.stat(p);
-      size = typeof st.size === 'number' ? st.size : null;
-      mtimeMs = typeof st.mtimeMs === 'number' ? st.mtimeMs : null;
+      size = typeof st.size === "number" ? st.size : null;
+      mtimeMs = typeof st.mtimeMs === "number" ? st.mtimeMs : null;
       const ext = path.extname(p).toLowerCase();
       type = ext || null;
-    } catch (e) {
-    }
+    } catch (e) {}
 
     let res;
     let usedCache = false;
@@ -546,17 +662,16 @@ ipcMain.handle('files:probeDurations', async (event, paths) => {
         const cached = await getCachedTrackMetadata(p);
         if (
           cached &&
-          typeof cached.duration === 'number' &&
+          typeof cached.duration === "number" &&
           Number.isFinite(cached.duration) &&
           cached.duration > 0 &&
-          (typeof cached.size !== 'number' || cached.size === size) &&
-          (typeof cached.mtimeMs !== 'number' || cached.mtimeMs === mtimeMs)
+          (typeof cached.size !== "number" || cached.size === size) &&
+          (typeof cached.mtimeMs !== "number" || cached.mtimeMs === mtimeMs)
         ) {
           res = { duration: cached.duration, error: null, code: 0 };
           usedCache = true;
         }
-      } catch (e) {
-      }
+      } catch (e) {}
     }
 
     if (!res) {
@@ -566,15 +681,32 @@ ipcMain.handle('files:probeDurations', async (event, paths) => {
     results.push({ path: p, ...res });
 
     try {
-      if (res && typeof res.duration === 'number' && Number.isFinite(res.duration) && res.duration > 0) {
-        event.sender.send('files:probeDurations:progress', { path: p, duration: res.duration });
+      if (
+        res &&
+        typeof res.duration === "number" &&
+        Number.isFinite(res.duration) &&
+        res.duration > 0
+      ) {
+        event.sender.send("files:probeDurations:progress", {
+          path: p,
+          duration: res.duration,
+        });
       } else if (res && res.error) {
-        event.sender.send('files:probeDurations:progress', { path: p, duration: null, error: res.error });
+        event.sender.send("files:probeDurations:progress", {
+          path: p,
+          duration: null,
+          error: res.error,
+        });
       }
-    } catch (e) {
-    }
+    } catch (e) {}
 
-    if (!usedCache && res && typeof res.duration === 'number' && Number.isFinite(res.duration) && res.duration > 0) {
+    if (
+      !usedCache &&
+      res &&
+      typeof res.duration === "number" &&
+      Number.isFinite(res.duration) &&
+      res.duration > 0
+    ) {
       try {
         await upsertTrackMetadata({
           path: p,
@@ -583,8 +715,7 @@ ipcMain.handle('files:probeDurations', async (event, paths) => {
           type,
           duration: res.duration,
         });
-      } catch (e) {
-      }
+      } catch (e) {}
     }
   }
 
@@ -598,137 +729,159 @@ app.whenReady().then(() => {
 
   const sendMediaCommand = (channel) => {
     try {
-      const win = BrowserWindow.getAllWindows().find((w) => w && !w.isDestroyed());
+      const win = BrowserWindow.getAllWindows().find(
+        (w) => w && !w.isDestroyed()
+      );
       if (win) {
         win.webContents.send(channel);
       }
     } catch (e) {
-      console.warn('Failed to send media command to renderer:', e);
+      console.warn("Failed to send media command to renderer:", e);
     }
   };
 
   const updateThumbarButtons = (win, isPlaying) => {
-    if (!win || win.isDestroyed() || process.platform !== 'win32') return;
+    if (!win || win.isDestroyed() || process.platform !== "win32") return;
     try {
-      const resourcesDir = path.join(__dirname, '../resources');
-      const appIcon = nativeImage.createFromPath(path.join(resourcesDir, 'icon.png'));
+      const resourcesDir = path.join(__dirname, "../resources");
+      const appIcon = nativeImage.createFromPath(
+        path.join(resourcesDir, "icon.png")
+      );
 
-      const prevIconRaw = nativeImage.createFromPath(path.join(resourcesDir, 'skip-back.png'));
-      const nextIconRaw = nativeImage.createFromPath(path.join(resourcesDir, 'skip-forward.png'));
-      const playIconRaw = nativeImage.createFromPath(path.join(resourcesDir, 'play.png'));
-      const pauseIconRaw = nativeImage.createFromPath(path.join(resourcesDir, 'pause.png'));
+      const prevIconRaw = nativeImage.createFromPath(
+        path.join(resourcesDir, "skip-back.png")
+      );
+      const nextIconRaw = nativeImage.createFromPath(
+        path.join(resourcesDir, "skip-forward.png")
+      );
+      const playIconRaw = nativeImage.createFromPath(
+        path.join(resourcesDir, "play.png")
+      );
+      const pauseIconRaw = nativeImage.createFromPath(
+        path.join(resourcesDir, "pause.png")
+      );
 
-      const prevIcon = prevIconRaw && !prevIconRaw.isEmpty() ? prevIconRaw : appIcon;
-      const nextIcon = nextIconRaw && !nextIconRaw.isEmpty() ? nextIconRaw : appIcon;
-      const playIcon = playIconRaw && !playIconRaw.isEmpty() ? playIconRaw : appIcon;
-      const pauseIcon = pauseIconRaw && !pauseIconRaw.isEmpty() ? pauseIconRaw : appIcon;
+      const prevIcon =
+        prevIconRaw && !prevIconRaw.isEmpty() ? prevIconRaw : appIcon;
+      const nextIcon =
+        nextIconRaw && !nextIconRaw.isEmpty() ? nextIconRaw : appIcon;
+      const playIcon =
+        playIconRaw && !playIconRaw.isEmpty() ? playIconRaw : appIcon;
+      const pauseIcon =
+        pauseIconRaw && !pauseIconRaw.isEmpty() ? pauseIconRaw : appIcon;
 
       const playPauseIcon = isPlaying ? pauseIcon : playIcon;
 
       win.setThumbarButtons([
         {
-          tooltip: 'previous',
+          tooltip: "previous",
           icon: prevIcon,
-          click: () => sendMediaCommand('media:previous'),
+          click: () => sendMediaCommand("media:previous"),
         },
         {
-          tooltip: isPlaying ? 'pause' : 'play',
+          tooltip: isPlaying ? "pause" : "play",
           icon: playPauseIcon,
-          click: () => sendMediaCommand('media:playPause'),
+          click: () => sendMediaCommand("media:playPause"),
         },
         {
-          tooltip: 'next',
+          tooltip: "next",
           icon: nextIcon,
-          click: () => sendMediaCommand('media:next'),
+          click: () => sendMediaCommand("media:next"),
         },
       ]);
     } catch (e) {
-      console.warn('Failed to update thumbar buttons:', e);
+      console.warn("Failed to update thumbar buttons:", e);
     }
   };
 
-  ipcMain.handle('player:updatePlaybackState', (_event, isPlaying) => {
+  ipcMain.handle("player:updatePlaybackState", (_event, isPlaying) => {
     try {
       playbackState.isPlaying = !!isPlaying;
-      const win = BrowserWindow.getAllWindows().find((w) => w && !w.isDestroyed());
+      const win = BrowserWindow.getAllWindows().find(
+        (w) => w && !w.isDestroyed()
+      );
       if (win) updateThumbarButtons(win, playbackState.isPlaying);
     } catch (e) {
-      console.warn('Failed to handle player:updatePlaybackState:', e);
+      console.warn("Failed to handle player:updatePlaybackState:", e);
     }
     return null;
   });
 
   try {
-    globalShortcut.register('MediaPlayPause', () => {
-      sendMediaCommand('media:playPause');
+    globalShortcut.register("MediaPlayPause", () => {
+      sendMediaCommand("media:playPause");
     });
-    globalShortcut.register('MediaNextTrack', () => {
-      sendMediaCommand('media:next');
+    globalShortcut.register("MediaNextTrack", () => {
+      sendMediaCommand("media:next");
     });
-    globalShortcut.register('MediaPreviousTrack', () => {
-      sendMediaCommand('media:previous');
+    globalShortcut.register("MediaPreviousTrack", () => {
+      sendMediaCommand("media:previous");
     });
   } catch (e) {
-    console.warn('Failed to register media key shortcuts:', e);
+    console.warn("Failed to register media key shortcuts:", e);
   }
 
   updateThumbarButtons(mainWindow, playbackState.isPlaying);
 
   const template = [
-
-    ...(process.platform === 'darwin'
+    ...(process.platform === "darwin"
       ? [
-        {
-          label: app.name,
-          submenu: [
-            { role: 'about' },
-            { type: 'separator' },
-            { role: 'quit' },
-          ],
-        },
-      ]
+          {
+            label: app.name,
+            submenu: [
+              { role: "about" },
+              { type: "separator" },
+              { role: "quit" },
+            ],
+          },
+        ]
       : []),
     {
-      label: 'File',
+      label: "File",
       submenu: [
         {
-          label: 'Open Folder',
-          accelerator: 'CmdOrCtrl+O',
+          label: "Open Folder",
+          accelerator: "CmdOrCtrl+O",
           click: async () => {
             await openFolderAndSend(mainWindow);
           },
         },
-        { type: 'separator' },
-        { role: 'quit' },
+        { type: "separator" },
+        { role: "quit" },
       ],
     },
 
     {
-      label: 'Edit',
-      submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }],
+      label: "Edit",
+      submenu: [
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+      ],
     },
   ];
 
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
 
-  app.on('activate', () => {
+  app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
   });
 });
 
-app.on('will-quit', () => {
+app.on("will-quit", () => {
   try {
     globalShortcut.unregisterAll();
-  } catch (e) {
-  }
+  } catch (e) {}
 });
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
     app.quit();
   }
 });
-

@@ -2,6 +2,8 @@
 
 An audio inspector. Made for quick viewing of audio files. Built with Electron + React and wavesurfer.js
 
+![](frontpage.png)
+
 ## Features
 
 - Audio scrubbing
@@ -12,13 +14,14 @@ An audio inspector. Made for quick viewing of audio files. Built with Electron +
 - Searching
 - Metadata viewing
 - Volume control
-- Interface customization
+- Speed control
+- Interface customization (including waveform, accent color, etc)
 
 ## Who is this for?
 
 This is for music producers, A&R Teams, labels, reviewers, and people who want to quickly inspect music.
 
-FFmpeg and ffprobe are included for conveience. In the future we will include an option to specify a custom FFmpeg/ffprobe path.
+FFmpeg and ffprobe are included for conveience. In the future we will include an option to specify a custom FFmpeg/ffprobe path, although we don't think it will be necessary.
 
 ## Getting Started with Developing
 

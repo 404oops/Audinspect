@@ -14,7 +14,20 @@ try {
 
 try {
   if (typeof document !== "undefined") {
-    document.documentElement.style.setProperty("--accent-color", initialAccentColor);
+    document.documentElement.style.setProperty(
+      "--accent-color",
+      initialAccentColor
+    );
+  }
+} catch (e) {}
+
+let initialNudgeAmount = 1.5;
+try {
+  if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+    const savedNudge = parseFloat(localStorage.getItem("nudgeAmount"));
+    if (!Number.isNaN(savedNudge) && savedNudge >= 0.25 && savedNudge <= 3) {
+      initialNudgeAmount = savedNudge;
+    }
   }
 } catch (e) {}
 
@@ -30,6 +43,10 @@ const usePlayerStore = create((set, get) => ({
   duration: 0,
   time: 0,
   volume: 100,
+  nudgeAmount: initialNudgeAmount,
+  playbackSpeed: 1,
+  wavesurferTheme: "precision",
+  wavesurferShowHover: true,
 
   // folder / playlist context
   folderTree: null,
@@ -47,7 +64,7 @@ const usePlayerStore = create((set, get) => ({
   isDragging: false,
   dragTarget: null,
 
-   // global UI
+  // global UI
   accentColor: initialAccentColor,
   isSettingsOpen: false,
   isWindowMaximized: false,
@@ -55,10 +72,7 @@ const usePlayerStore = create((set, get) => ({
   // actions: basic setters
   setFiles: (updater) =>
     set((state) => ({
-      files:
-        typeof updater === "function"
-          ? updater(state.files)
-          : updater,
+      files: typeof updater === "function" ? updater(state.files) : updater,
     })),
   setCurrentIndex: (currentIndex) => set({ currentIndex }),
   setSelectedIndex: (selectedIndex) => set({ selectedIndex }),
@@ -67,6 +81,22 @@ const usePlayerStore = create((set, get) => ({
   setDuration: (duration) => set({ duration }),
   setTime: (time) => set({ time }),
   setVolume: (volume) => set({ volume }),
+  setNudgeAmount: (amount) =>
+    set((state) => {
+      const rangeClamped =
+        typeof amount === "number" && Number.isFinite(amount)
+          ? Math.min(3, Math.max(0.25, amount))
+          : state.nudgeAmount;
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("nudgeAmount", rangeClamped.toString());
+        }
+      } catch (e) {}
+      return { nudgeAmount: rangeClamped };
+    }),
+  setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
+  setWavesurferTheme: (theme) => set({ wavesurferTheme: theme }),
+  setWavesurferShowHover: (show) => set({ wavesurferShowHover: show }),
   setFolderTree: (folderTree) => set({ folderTree }),
   setDurations: (durations) => set({ durations }),
   setFileMetadata: (fileMetadata) => set({ fileMetadata }),
@@ -90,7 +120,8 @@ const usePlayerStore = create((set, get) => ({
 
   openSettings: () => set({ isSettingsOpen: true }),
   closeSettings: () => set({ isSettingsOpen: false }),
-  toggleWindowMaximized: () => set((state) => ({ isWindowMaximized: !state.isWindowMaximized })),
+  toggleWindowMaximized: () =>
+    set((state) => ({ isWindowMaximized: !state.isWindowMaximized })),
 
   // sort mode + folder path with localStorage integration
   setCurrentFolderPath: (currentFolderPath) => {

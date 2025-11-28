@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getFilePath: (fileRef) => ipcRenderer.invoke('file:getPath', fileRef),
   processFromBytes: (fileName, fileBytes) => ipcRenderer.invoke('file:processFromBytes', fileName, fileBytes),
 
+
   toFileUrl: (p) => {
     if (!p) return '';
 

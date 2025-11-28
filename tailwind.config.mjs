@@ -1,8 +1,5 @@
 export default {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       colors: {
@@ -10,7 +7,7 @@ export default {
         "international-blue": "#0050FF",
       },
       fontFamily: {
-        sans: ["Space Grotesk", "sans-serif"],
+        sans: ["Exo 2", "sans-serif"],
         mono: ["JetBrains Mono", "monospace"],
       },
       spacing: {
