@@ -50,10 +50,7 @@
       "target": [
         {
           "target": "nsis",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
+          "arch": "x64"
         }
       ],
       "files": [
@@ -71,10 +68,7 @@
       "target": [
         {
           "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
+          "arch": "arm64"
         }
       ],
       "files": [
