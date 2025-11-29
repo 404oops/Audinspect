@@ -12,6 +12,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   traverseFolder: (folderPath) => ipcRenderer.invoke('files:traverse', folderPath),
   getFilePath: (fileRef) => ipcRenderer.invoke('file:getPath', fileRef),
   processFromBytes: (fileName, fileBytes) => ipcRenderer.invoke('file:processFromBytes', fileName, fileBytes),
+  watchFolder: (folderPath) => ipcRenderer.invoke('folder:watch', folderPath),
+  unwatchFolder: () => ipcRenderer.invoke('folder:unwatch'),
+  exportLegacyMetadata: () => ipcRenderer.invoke('metadata:exportLegacy'),
+  deleteLegacyMetadata: () => ipcRenderer.invoke('metadata:deleteLegacy'),
+
+  // binary download apis
+  getBinariesStatus: () => ipcRenderer.invoke('binaries:status'),
+  downloadBinaries: () => ipcRenderer.invoke('binaries:download'),
+  onBinariesDownloadProgress: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('binaries:downloadProgress', listener);
+    return () => ipcRenderer.removeListener('binaries:downloadProgress', listener);
+  },
 
 
   toFileUrl: (p) => {
@@ -41,6 +55,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('files:loaded', listener);
     return () => ipcRenderer.removeListener('files:loaded', listener);
   },
+  onFolderFilesDelta: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('folder:filesDelta', listener);
+    return () => ipcRenderer.removeListener('folder:filesDelta', listener);
+  },
+  onFilesMetadataDelta: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, items) => callback(items);
+    ipcRenderer.on('files:metadataDelta', listener);
+    return () => ipcRenderer.removeListener('files:metadataDelta', listener);
+  },
   onMediaPlayPause: (callback) => {
     if (typeof callback !== 'function') return () => {};
     const listener = () => callback();
@@ -64,6 +90,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
   maximizeWindow: () => ipcRenderer.invoke('window:maximize'),
   closeWindow: () => ipcRenderer.invoke('window:close'),
+  openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
 
   onFullscreenChange: (callback) => {
     if (typeof callback !== 'function') return () => {};

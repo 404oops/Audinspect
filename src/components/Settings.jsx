@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   X,
   Palette,
@@ -6,8 +6,10 @@ import {
   Settings2,
   Check,
   ChevronDown,
+  Info,
 } from "lucide-react";
 import usePlayerStore from "../store/usePlayerStore";
+import appIcon from "../../resources/icon.png";
 
 const PRESET_COLORS = [
   { name: "International Blue", value: "#0050ff" },
@@ -35,27 +37,41 @@ export default function Settings({ isOpen, onClose }) {
   const setWavesurferShowHover = usePlayerStore(
     (state) => state.setWavesurferShowHover
   );
+  const audioOutputDevice = usePlayerStore((state) => state.audioOutputDevice);
+  const setAudioOutputDevice = usePlayerStore(
+    (state) => state.setAudioOutputDevice
+  );
+  const preservePitch = usePlayerStore((state) => state.preservePitch);
+  const setPreservePitch = usePlayerStore((state) => state.setPreservePitch);
   const [audioDevices, setAudioDevices] = useState([]);
-  const [selectedDevice, setSelectedDevice] = useState("");
   const [activeTab, setActiveTab] = useState("general");
   const [rememberLastFolder, setRememberLastFolder] = useState(false);
   const [rememberLastSortMode, setRememberLastSortMode] = useState(false);
   const [sortModeScope, setSortModeScope] = useState("global");
+  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+  const [isDeviceMenuOpen, setIsDeviceMenuOpen] = useState(false);
+  const themeMenuRef = useRef(null);
+  const deviceMenuRef = useRef(null);
 
-  const selectThemeClass = {
-    precision:
-      "bg-pure-black text-white border-2 border-white focus:border-[var(--accent-color)]",
-    prettiness:
-      "bg-gradient-to-r from-[var(--accent-color)]/20 via-pink-500/25 to-purple-500/20 text-white border-2 border-[var(--accent-color)]/60 hover:border-[var(--accent-color)] focus:border-[var(--accent-color)]",
-    minimal:
-      "bg-pure-black/85 text-white/85 border border-white/30 hover:border-white/60 focus:border-[var(--accent-color)] text-sm",
-  };
+  const themeOptions = [
+    { value: "default", label: "Default" },
+    { value: "sleek", label: "Sleek" },
+    { value: "classic", label: "Classic" },
+  ];
 
-  const chevronThemeClass = {
-    precision: "text-white/70",
-    prettiness: "text-white",
-    minimal: "text-white/60",
-  };
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e) => {
+      if (themeMenuRef.current && !themeMenuRef.current.contains(e.target)) {
+        setIsThemeMenuOpen(false);
+      }
+      if (deviceMenuRef.current && !deviceMenuRef.current.contains(e.target)) {
+        setIsDeviceMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -77,11 +93,6 @@ export default function Settings({ isOpen, onClose }) {
   }, [isOpen, onClose]);
 
   const loadSettings = () => {
-    const savedDevice = localStorage.getItem("audioOutputDevice");
-    if (savedDevice) {
-      setSelectedDevice(savedDevice);
-    }
-
     const savedRememberLastFolder = localStorage.getItem("rememberLastFolder");
     setRememberLastFolder(savedRememberLastFolder === "true");
 
@@ -104,8 +115,9 @@ export default function Settings({ isOpen, onClose }) {
       );
       setAudioDevices(audioOutputs);
 
-      if (audioOutputs.length > 0 && !selectedDevice) {
-        setSelectedDevice(audioOutputs[0].deviceId);
+      // if no device is selected yet, default to the first one
+      if (audioOutputs.length > 0 && !audioOutputDevice) {
+        setAudioOutputDevice(audioOutputs[0].deviceId);
       }
     } catch (error) {
       console.error("Error loading audio devices:", error);
@@ -118,29 +130,9 @@ export default function Settings({ isOpen, onClose }) {
     localStorage.setItem("accentColor", color);
   };
 
-  const handleDeviceChange = async (deviceId) => {
-    setSelectedDevice(deviceId);
-    localStorage.setItem("audioOutputDevice", deviceId);
-
-    const audioElement = document.querySelector("audio");
-    if (audioElement && typeof audioElement.setSinkId === "function") {
-      try {
-        await audioElement.setSinkId(deviceId);
-      } catch (error) {
-        console.error("Error setting audio output device:", error);
-      }
-    }
-
-    try {
-      if (
-        window.wavesurfer &&
-        typeof window.wavesurfer.setSinkId === "function"
-      ) {
-        await window.wavesurfer.setSinkId(deviceId);
-      }
-    } catch (error) {
-      console.error("Error setting WaveSurfer audio output device:", error);
-    }
+  const handleDeviceChange = (deviceId) => {
+    // update store - audioplayer will react to this and apply setSinkId
+    setAudioOutputDevice(deviceId);
   };
 
   const handleCustomColorChange = (e) => {
@@ -217,7 +209,7 @@ export default function Settings({ isOpen, onClose }) {
           </button>
           <button
             onClick={() => setActiveTab("audio")}
-            className={`flex items-center gap-8 px-16 py-8 text-white transition-all duration-200 ${
+            className={`flex items-center gap-8 px-16 py-8 text-white transition-all duration-200 border-r-2 border-white ${
               activeTab === "audio"
                 ? "bg-[var(--accent-color)]"
                 : "bg-pure-black hover:bg-white/10"
@@ -225,6 +217,17 @@ export default function Settings({ isOpen, onClose }) {
           >
             <Volume2 size={16} strokeWidth={2} />
             <span>Audio</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("about")}
+            className={`flex items-center gap-8 px-16 py-8 text-white transition-all duration-200 ${
+              activeTab === "about"
+                ? "bg-[var(--accent-color)]"
+                : "bg-pure-black hover:bg-white/10"
+            }`}
+          >
+            <Info size={16} strokeWidth={2} />
+            <span>About</span>
           </button>
         </div>
 
@@ -343,6 +346,70 @@ export default function Settings({ isOpen, onClose }) {
                   )}
                 </div>
               </div>
+
+              {/* playback */}
+              <div>
+                <h3 className="text-sm font-bold text-white mb-16 uppercase tracking-wider">
+                  Playback
+                </h3>
+
+                <div className="flex items-center gap-16">
+                  <label className="block text-14 font-medium whitespace-nowrap">
+                    Nudge amount
+                  </label>
+                  <input
+                    type="range"
+                    min="0.25"
+                    max="3"
+                    step="0.25"
+                    value={nudgeAmount}
+                    onChange={(e) =>
+                      setNudgeAmount(parseFloat(e.target.value))
+                    }
+                    className="flex-1 h-2 bg-white/20 appearance-none cursor-pointer"
+                    style={{
+                      background: `linear-gradient(to right, var(--accent-color) 0%, var(--accent-color) ${((nudgeAmount - 0.25) / 2.75) * 100}%, rgba(255,255,255,0.2) ${((nudgeAmount - 0.25) / 2.75) * 100}%, rgba(255,255,255,0.2) 100%)`,
+                    }}
+                  />
+                  <div className="text-sm font-mono text-white/60 min-w-[60px] text-right">
+                    {nudgeAmount.toFixed(2)}s
+                  </div>
+                </div>
+                <div className="flex justify-between text-12 text-white/40 mt-4 ml-[120px]">
+                  <span>0.25s</span>
+                  <span className="mr-[68px]">3s</span>
+                </div>
+
+                <div className="mt-24">
+                  <label className="flex items-center gap-5 cursor-pointer group">
+                    <div className="relative">
+                      <input
+                        type="checkbox"
+                        checked={preservePitch}
+                        onChange={(e) => setPreservePitch(e.target.checked)}
+                        className="sr-only"
+                      />
+                      <div
+                        className={`size-6 border-2 transition-all duration-200 ${
+                          preservePitch
+                            ? "bg-[var(--accent-color)] border-[var(--accent-color)]"
+                            : "bg-pure-black border-white/40 group-hover:border-white"
+                        }`}
+                      >
+                        {preservePitch && (
+                          <Check size={20} strokeWidth={2} />
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-white">
+                      Preserve pitch when changing speed
+                    </span>
+                  </label>
+                  <p className="mt-[1rem] text-sm text-white/40">
+                    When enabled, changing playback speed will not affect the pitch of the audio.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
@@ -395,67 +462,85 @@ export default function Settings({ isOpen, onClose }) {
                 </div>
               </div>
 
-              {/* Waveform Theme */}
-              <div className="mb-24 flex items-center gap-16">
-                <label className="block text-14 font-medium mb-8">
-                  Waveform Theme
-                </label>
-                <div className="relative inline-block">
-                  <select
-                    value={wavesurferTheme}
-                    onChange={(e) => setWavesurferTheme(e.target.value)}
-                    className={`text-xs px-8 pr-32 pl-5 py-[0.6rem] no-drag appearance-none transition-all duration-200 focus:outline-none ${
-                      selectThemeClass[wavesurferTheme] ||
-                      selectThemeClass.precision
-                    }`}
-                  >
-                    <option value="precision">Precision Mode</option>
-                    <option value="prettiness">Prettiness</option>
-                    <option value="minimal">Minimal</option>
-                  </select>
-                  <ChevronDown
-                    size={14}
-                    strokeWidth={2}
-                    className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition-colors ${
-                      chevronThemeClass[wavesurferTheme] ||
-                      chevronThemeClass.precision
-                    }`}
-                  />
-                </div>
-              </div>
-
-              {/* Show Hover Plugin */}
-              <div className="mb-24 flex items-center justify-between">
-                <label className="text-14 font-medium">
-                  Show cursor with time
-                </label>
-                <input
-                  type="checkbox"
-                  checked={wavesurferShowHover}
-                  onChange={(e) => setWavesurferShowHover(e.target.checked)}
-                  className="w-16 h-16 accent-accent-color cursor-pointer"
-                />
-              </div>
-
-              {/* Nudge Amount */}
+              {/* waveform theme */}
               <div className="mb-24">
-                <label className="block text-14 font-medium mb-8">
-                  Nudge Amount: {nudgeAmount.toFixed(2)}s
-                </label>
-                <input
-                  type="range"
-                  min="0.25"
-                  max="3"
-                  step="0.25"
-                  value={nudgeAmount}
-                  onChange={(e) => setNudgeAmount(parseFloat(e.target.value))}
-                  className="w-full accent-accent-color"
-                />
-                <div className="flex justify-between text-12 text-gray-500 mt-4">
-                  <span>0.25s</span>
-                  <span>3s</span>
+                <div className="flex items-center gap-16">
+                  <label className="block text-14 font-medium">
+                    Waveform Theme
+                  </label>
+                  <div ref={themeMenuRef} className="relative inline-block">
+                    <button
+                      type="button"
+                      onClick={() => setIsThemeMenuOpen((prev) => !prev)}
+                      className="bg-pure-black text-white border-2 border-white text-xs w-[120px] px-8 py-[0.5rem] no-drag focus:outline-none focus:border-[var(--accent-color)] transition-all text-left flex items-center justify-between"
+                    >
+                      <span>{themeOptions.find((o) => o.value === wavesurferTheme)?.label || "Classic"}</span>
+                      <ChevronDown size={14} strokeWidth={2} className="text-white/70" />
+                    </button>
+                    {isThemeMenuOpen && (
+                      <div className="absolute left-0 mt-2 w-[120px] bg-pure-black border-2 border-white shadow-lg z-50">
+                        {themeOptions.map((option) => {
+                          const isActive = option.value === wavesurferTheme;
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => {
+                                setWavesurferTheme(option.value);
+                                setIsThemeMenuOpen(false);
+                              }}
+                              className={`w-full flex items-center justify-between px-2 py-2 text-xs no-drag transition-colors ${
+                                isActive
+                                  ? "bg-[var(--accent-color)] text-white"
+                                  : "bg-pure-black text-white hover:bg-white hover:text-pure-black"
+                              }`}
+                            >
+                              <span>{option.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
+                <p className="mt-8 text-sm text-white/40">
+                  Changing the theme will briefly pause playback.
+                </p>
               </div>
+
+              {/* show hover plugin */}
+              <div className="mb-24">
+                <label className="flex items-center gap-5 cursor-pointer group">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={wavesurferShowHover}
+                      onChange={(e) => setWavesurferShowHover(e.target.checked)}
+                      className="sr-only"
+                    />
+                    <div
+                      className={`size-6 border-2 transition-all duration-200 ${
+                        wavesurferShowHover
+                          ? "bg-[var(--accent-color)] border-[var(--accent-color)]"
+                          : "bg-pure-black border-white/40 group-hover:border-white"
+                      }`}
+                    >
+                      {wavesurferShowHover && (
+                        <Check size={20} strokeWidth={2} />
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-white">Show cursor with time</span>
+                  
+                </label>
+              </div>
+              <p className="mt-8 text-sm text-white/40">
+                  When enabled, you will see a visible seek head with a flag on the upper-right corner indicating the time at the position of the seek head when you move your cursor on the track view.
+                </p>
+                <p className="mt-8 text-sm text-white/40">
+                  Changing this will briefly pause playback.
+                </p>
+
             </div>
           )}
 
@@ -467,18 +552,44 @@ export default function Settings({ isOpen, onClose }) {
                 </h3>
 
                 {audioDevices.length > 0 ? (
-                  <select
-                    value={selectedDevice}
-                    onChange={(e) => handleDeviceChange(e.target.value)}
-                    className="w-full px-8 py-8 bg-pure-black border-2 border-white text-white focus:outline-none focus:border-[var(--accent-color)] transition-all duration-200"
-                  >
-                    {audioDevices.map((device) => (
-                      <option key={device.deviceId} value={device.deviceId}>
-                        {device.label ||
-                          `audio output ${audioDevices.indexOf(device) + 1}`}
-                      </option>
-                    ))}
-                  </select>
+                  <div ref={deviceMenuRef} className="relative w-full">
+                    <button
+                      type="button"
+                      onClick={() => setIsDeviceMenuOpen((prev) => !prev)}
+                      className="w-full bg-pure-black text-white border-2 border-white text-xs px-8 py-[0.5rem] no-drag focus:outline-none focus:border-[var(--accent-color)] transition-all text-left flex items-center justify-between"
+                    >
+                      <span className="truncate">
+                        {audioDevices.find((d) => d.deviceId === audioOutputDevice)?.label ||
+                          `audio output ${audioDevices.findIndex((d) => d.deviceId === audioOutputDevice) + 1}` ||
+                          "Select device"}
+                      </span>
+                      <ChevronDown size={14} strokeWidth={2} className="text-white/70 flex-shrink-0 ml-2" />
+                    </button>
+                    {isDeviceMenuOpen && (
+                      <div className="absolute left-0 mt-2 w-full bg-pure-black border-2 border-white shadow-lg z-50 max-h-[200px] overflow-y-auto">
+                        {audioDevices.map((device, idx) => {
+                          const isActive = device.deviceId === audioOutputDevice;
+                          return (
+                            <button
+                              key={device.deviceId}
+                              type="button"
+                              onClick={() => {
+                                handleDeviceChange(device.deviceId);
+                                setIsDeviceMenuOpen(false);
+                              }}
+                              className={`w-full flex items-center justify-between px-2 py-2 text-xs no-drag transition-colors ${
+                                isActive
+                                  ? "bg-[var(--accent-color)] text-white"
+                                  : "bg-pure-black text-white hover:bg-white hover:text-pure-black"
+                              }`}
+                            >
+                              <span className="truncate">{device.label || `audio output ${idx + 1}`}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div className="text-white/60">
                     No audio output devices found. This may require microphone
@@ -492,6 +603,37 @@ export default function Settings({ isOpen, onClose }) {
                   immediately.
                 </p>
               </div>
+            </div>
+          )}
+
+          {activeTab === "about" && (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <img
+                src={appIcon}
+                alt="Audinspect Icon"
+                className="w-96 h-96 mb-16"
+              />
+              <h3 className="text-2xl font-bold text-white mb-8">Audinspect</h3>
+              <p className="text-white/60 mb-4">Version 2.1.0 (a)</p>
+              <p className="text-white/40 text-sm">Created by 404oops</p>
+
+              <div className="flex gap-4 mt-6">
+                <button
+                  onClick={() => window.electronAPI.openExternal('https://github.com/404oops/Audinspect')}
+                  className="text-white/50 hover:text-white text-sm transition-colors"
+                >
+                  GitHub
+                </button>
+                <span className="text-white/20">•</span>
+                <button
+                  onClick={() => window.electronAPI.openExternal('https://github.com/404oops/Audinspect/blob/main/LICENSE')}
+                  className="text-white/50 hover:text-white text-sm transition-colors"
+                >
+                  License
+                </button>
+              </div>
+
+              <p className="text-white/20 text-xs mt-8">© 2025 404oops. Licensed under GPL-3.0.</p>
             </div>
           )}
         </div>
