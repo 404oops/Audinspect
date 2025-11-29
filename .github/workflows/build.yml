@@ -53,7 +53,12 @@ jobs:
           echo "PYTHON=$(which python)" >> $GITHUB_ENV
 
       - name: Install Dependencies
+        if: matrix.os != 'windows-11-arm'
         run: npm install
+
+      - name: Install Dependencies (omit optional on Windows ARM)
+        if: matrix.os == 'windows-11-arm'
+        run: npm install --omit=optional
 
       - name: Build Electron App
         run: npm run package
