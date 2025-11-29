@@ -65,13 +65,14 @@ jobs:
         run: |
           echo "PYTHON=$(which python)" >> $GITHUB_ENV
 
-      - name: Install Dependencies
-        if: matrix.os != 'windows-11-arm'
-        run: npm install
-
-      - name: Install Dependencies (omit optional on Windows ARM)
+      - name: Remove package-lock on Windows ARM (Rollup optional deps workaround)
         if: matrix.os == 'windows-11-arm'
-        run: npm install --omit=optional
+        shell: pwsh
+        run: |
+          if (Test-Path package-lock.json) { Remove-Item package-lock.json -Force }
+
+      - name: Install Dependencies
+        run: npm install
 
       - name: Build Electron App
         run: npm run package
