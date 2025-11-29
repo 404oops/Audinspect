@@ -238,7 +238,7 @@ export default function PlayerArea({
               {formatTime(duration)}
             </div>
 
-            {/* Playback Speed Selector */}
+            {/* playback speed selector */}
             <div className="pl-8 mb-[3px] flex items-center">
               <div className="flex items-center gap-4">
                 

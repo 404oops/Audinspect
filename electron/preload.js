@@ -14,6 +14,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   processFromBytes: (fileName, fileBytes) => ipcRenderer.invoke('file:processFromBytes', fileName, fileBytes),
   watchFolder: (folderPath) => ipcRenderer.invoke('folder:watch', folderPath),
   unwatchFolder: () => ipcRenderer.invoke('folder:unwatch'),
+  exportLegacyMetadata: () => ipcRenderer.invoke('metadata:exportLegacy'),
+  deleteLegacyMetadata: () => ipcRenderer.invoke('metadata:deleteLegacy'),
+
+  // binary download apis
+  getBinariesStatus: () => ipcRenderer.invoke('binaries:status'),
+  downloadBinaries: () => ipcRenderer.invoke('binaries:download'),
+  onBinariesDownloadProgress: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('binaries:downloadProgress', listener);
+    return () => ipcRenderer.removeListener('binaries:downloadProgress', listener);
+  },
 
 
   toFileUrl: (p) => {

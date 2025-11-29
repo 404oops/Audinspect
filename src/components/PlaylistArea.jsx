@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { List } from "react-window";
 import { Search, File, Folder, CircleX, ChevronDown } from "lucide-react";
 import {
@@ -33,6 +33,29 @@ export default function PlaylistArea({
   onDrop,
 }) {
   const [isOpenMenu, setIsOpenMenu] = useState(false);
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const listContainerRef = useRef(null);
+  const sortMenuRef = useRef(null);
+
+  const sortOptions = [
+    { value: "none", label: "name (A-Z)" },
+    { value: "nameDesc", label: "name (Z-A)" },
+    { value: "length", label: "length (short - long)" },
+    { value: "lengthDesc", label: "length (long - short)" },
+    { value: "date", label: "last modified (newest)" },
+    { value: "dateOldest", label: "last modified (oldest)" },
+  ];
+
+  useEffect(() => {
+    if (!isSortMenuOpen) return;
+    const handleClickOutside = (e) => {
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target)) {
+        setIsSortMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isSortMenuOpen]);
   const pairs = files.map((f, idx) => ({ f, idx }));
   const q = (searchQuery || "").toLowerCase().trim();
   const filtered = q
@@ -96,99 +119,113 @@ export default function PlaylistArea({
     });
   }
 
-  const PlaylistRow = ({ index, style, ariaAttributes }) => {
-    const { f, idx } = rows[index];
+  // row component for react-window 2.x
+  const PlaylistRow = useCallback(
+    ({ index, style, rows: rowData }) => {
+      const { f, idx } = rowData[index];
 
-    return (
-      <div
-        style={{
-          ...style,
-          display: "flex",
-          alignItems: "center",
-          paddingTop: "12px",
-          paddingLeft: "12px",
-          paddingRight: "12px",
-        }}
-      >
+      return (
         <div
-          role="button"
-          tabIndex={0}
-          onClick={() => loadAtIndex(idx)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") loadAtIndex(idx);
+          style={{
+            ...style,
+            display: "flex",
+            alignItems: "center",
+            paddingTop: "12px",
+            paddingLeft: "12px",
+            paddingRight: "12px",
           }}
-          className={`group flex items-center justify-between pl-8 pr-8 py-8 cursor-pointer transition-all duration-200 border flex-1 ${
-            idx === currentIndex
-              ? "bg-[var(--accent-color)]/10 border-[var(--accent-color)]"
-              : idx === selectedIndex
-              ? "bg-pure-black border-[var(--accent-color)]"
-              : "bg-pure-black border-white/20 hover:border-white"
-          }`}
         >
-          <div className="flex items-center gap-8 flex-1 min-w-0">
-            <div
-              className={`w-8 h-8 ${
-                idx === currentIndex && isPlaying
-                  ? "bg-[var(--accent-color)] animate-pulse"
-                  : idx === currentIndex
-                  ? "bg-[var(--accent-color)]"
-                  : "bg-white/20"
-              } rounded-full flex-shrink-0`}
-            />
-            <div className="flex items-center justify-between gap-4 flex-1 min-w-0">
-              <div className="truncate text-white text-sm">
-                {getDisplayName(f)}
-              </div>
-              <div className="ml-4 text-[11px] text-white/40 text-right flex-shrink-0 max-w-[50%]">
-                {(() => {
-                  const meta = fileMetadata && fileMetadata[f];
-                  const lengthSec =
-                    durations && typeof durations[f] === "number"
-                      ? durations[f]
-                      : null;
-                  const pieces = [];
-                  if (lengthSec != null) {
-                    pieces.push(formatTime(lengthSec));
-                  }
-                  if (meta && typeof meta.size === "number") {
-                    const sizeLabel = formatBytes(meta.size);
-                    if (sizeLabel) pieces.push(sizeLabel);
-                  }
-                  if (meta && meta.type) {
-                    const typeLabel = formatFileType(meta.type);
-                    if (typeLabel) pieces.push(typeLabel);
-                  }
-                  const mtimeSource =
-                    meta && (meta.mtimeIso != null || meta.mtimeMs != null)
-                      ? meta.mtimeIso != null
-                        ? meta.mtimeIso
-                        : meta.mtimeMs
-                      : null;
-                  if (mtimeSource != null) {
-                    const dateLabel = formatDateFromMeta(mtimeSource);
-                    if (dateLabel) pieces.push(dateLabel);
-                  }
-                  return pieces.join("  •  ");
-                })()}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => loadAtIndex(idx)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") loadAtIndex(idx);
+            }}
+            className={`group flex items-center justify-between pl-8 pr-8 py-8 cursor-pointer transition-all duration-200 border flex-1 ${
+              idx === currentIndex
+                ? "bg-[var(--accent-color)]/10 border-[var(--accent-color)]"
+                : idx === selectedIndex
+                ? "bg-pure-black border-[var(--accent-color)]"
+                : "bg-pure-black border-white/20 hover:border-white"
+            }`}
+          >
+            <div className="flex items-center gap-8 flex-1 min-w-0">
+              <div
+                className={`w-8 h-8 ${
+                  idx === currentIndex && isPlaying
+                    ? "bg-[var(--accent-color)] animate-pulse"
+                    : idx === currentIndex
+                    ? "bg-[var(--accent-color)]"
+                    : "bg-white/20"
+                } rounded-full flex-shrink-0`}
+              />
+              <div className="flex items-center justify-between gap-4 flex-1 min-w-0">
+                <div className="truncate text-white text-sm">
+                  {getDisplayName(f)}
+                </div>
+                <div className="ml-4 text-[11px] text-white/40 text-right flex-shrink-0 max-w-[50%]">
+                  {(() => {
+                    const meta = fileMetadata && fileMetadata[f];
+                    const lengthSec =
+                      durations && typeof durations[f] === "number"
+                        ? durations[f]
+                        : null;
+                    const pieces = [];
+                    if (lengthSec != null) {
+                      pieces.push(formatTime(lengthSec));
+                    }
+                    if (meta && typeof meta.size === "number") {
+                      const sizeLabel = formatBytes(meta.size);
+                      if (sizeLabel) pieces.push(sizeLabel);
+                    }
+                    if (meta && meta.type) {
+                      const typeLabel = formatFileType(meta.type);
+                      if (typeLabel) pieces.push(typeLabel);
+                    }
+                    const mtimeSource =
+                      meta && (meta.mtimeIso != null || meta.mtimeMs != null)
+                        ? meta.mtimeIso != null
+                          ? meta.mtimeIso
+                          : meta.mtimeMs
+                        : null;
+                    if (mtimeSource != null) {
+                      const dateLabel = formatDateFromMeta(mtimeSource);
+                      if (dateLabel) pieces.push(dateLabel);
+                    }
+                    return pieces.join("  •  ");
+                  })()}
+                </div>
               </div>
             </div>
+            {!currentFolderPath && (
+              <button
+                className="opacity-0 ml-[0.6rem] group-hover:opacity-100 transition-opacity bg-pure-black border border-white hover:bg-white hover:text-pure-black text-white p-4 no-drag flex-shrink-0"
+                onClick={(ev) => {
+                  ev.stopPropagation();
+                  onDeleteTrack(idx);
+                }}
+                aria-label={`Delete ${getDisplayName(f)}`}
+              >
+                <CircleX size={18} strokeWidth={2} />
+              </button>
+            )}
           </div>
-          {!currentFolderPath && (
-            <button
-              className="opacity-0 ml-[0.6rem] group-hover:opacity-100 transition-opacity bg-pure-black border border-white hover:bg-white hover:text-pure-black text-white p-4 no-drag flex-shrink-0"
-              onClick={(ev) => {
-                ev.stopPropagation();
-                onDeleteTrack(idx);
-              }}
-              aria-label={`Delete ${getDisplayName(f)}`}
-            >
-              <CircleX size={18} strokeWidth={2} />
-            </button>
-          )}
         </div>
-      </div>
-    );
-  };
+      );
+    },
+    [
+      rows,
+      currentIndex,
+      selectedIndex,
+      isPlaying,
+      fileMetadata,
+      durations,
+      getDisplayName,
+      currentFolderPath,
+      onDeleteTrack,
+    ]
+  );
 
   return (
     <div
@@ -252,24 +289,39 @@ export default function PlaylistArea({
                 className="flex-1 bg-transparent text-sm text-white focus:outline-none"
               />
             </div>
-            <div className="relative">
-              <select
-                value={sortMode}
-                onChange={(e) => setSortMode(e.target.value)}
-                className="bg-pure-black text-white border-2 border-white text-xs w-[165px] px-[8px] py-[0.6rem] no-drag appearance-none focus:outline-none focus:border-[var(--accent-color)] transition-all"
+            <div ref={sortMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setIsSortMenuOpen((prev) => !prev)}
+                className="bg-pure-black text-white border-2 border-white text-xs w-[185px] px-8 py-[0.5rem] no-drag focus:outline-none focus:border-[var(--accent-color)] transition-all text-left flex items-center justify-between"
               >
-                <option value="none">name (A–Z)</option>
-                <option value="nameDesc">name (Z–A)</option>
-                <option value="length">length (short → long)</option>
-                <option value="lengthDesc">length (long → short)</option>
-                <option value="date">last modified (newest)</option>
-                <option value="dateOldest">last modified (oldest)</option>
-              </select>
-              <ChevronDown
-                size={14}
-                strokeWidth={2}
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/70"
-              />
+                <span>{sortOptions.find((o) => o.value === sortMode)?.label || "name (A-Z)"}</span>
+                <ChevronDown size={14} strokeWidth={2} className="text-white/70" />
+              </button>
+              {isSortMenuOpen && (
+                <div className="absolute right-0 mt-2 w-[185px] bg-pure-black border-2 border-white shadow-lg z-50">
+                  {sortOptions.map((option) => {
+                    const isActive = option.value === sortMode;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          setSortMode(option.value);
+                          setIsSortMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-2 py-2 text-xs no-drag transition-colors ${
+                          isActive
+                            ? "bg-[var(--accent-color)] text-white"
+                            : "bg-pure-black text-white hover:bg-white hover:text-pure-black"
+                        }`}
+                      >
+                        <span>{option.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <div
               className="relative"
@@ -340,7 +392,7 @@ export default function PlaylistArea({
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
+      <div ref={listContainerRef} className="flex-1 overflow-hidden">
         {files.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-32">
             <div className="text-lg font-semibold text-white/60 mb-8">
@@ -352,11 +404,10 @@ export default function PlaylistArea({
           </div>
         ) : (
           <List
-            style={{ height: "100%", width: "100%" }}
             rowCount={rows.length}
             rowHeight={44}
             rowComponent={PlaylistRow}
-            rowProps={{}}
+            rowProps={{ rows }}
           />
         )}
       </div>

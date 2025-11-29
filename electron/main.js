@@ -14,6 +14,12 @@ const fs = require("fs").promises;
 const { spawn } = require("child_process");
 const { Level } = require("level");
 const chokidar = require("chokidar");
+const {
+  getFFmpegPath,
+  getFFprobePath,
+  ensureBinariesExist,
+  areBinariesAvailable,
+} = require("./ffmpeg-downloader");
 
 const AUDIO_EXTENSIONS = new Set([
   ".mp3",
@@ -113,9 +119,6 @@ function scheduleMetadataFlush() {
           type: ext || null,
         };
         items.push(meta);
-        try {
-          await upsertTrackMetadata(meta);
-        } catch (e) {}
       } catch (e) {}
     }
     if (!items.length) return;
@@ -146,6 +149,79 @@ async function collectAudioFiles(dir) {
   return results;
 }
 
+let legacyMetadataDb = null;
+
+function getLegacyMetadataDb() {
+  if (legacyMetadataDb) return legacyMetadataDb;
+  const userDataDir = app.getPath("userData");
+  const dbPath = path.join(userDataDir, "audinspect-metadata");
+  legacyMetadataDb = new Level(dbPath, { valueEncoding: "json" });
+  return legacyMetadataDb;
+}
+
+async function exportLegacyMetadataRecords() {
+  let db;
+  try {
+    db = getLegacyMetadataDb();
+  } catch (e) {
+    return [];
+  }
+
+  const records = [];
+  try {
+    for await (const [key, value] of db.iterator()) {
+      if (!value || typeof value !== "object") continue;
+      const size =
+        typeof value.size === "number" && Number.isFinite(value.size)
+          ? value.size
+          : null;
+      const mtimeMs =
+        typeof value.mtimeMs === "number" && Number.isFinite(value.mtimeMs)
+          ? value.mtimeMs
+          : null;
+      const duration =
+        typeof value.duration === "number" &&
+        Number.isFinite(value.duration) &&
+        value.duration > 0
+          ? value.duration
+          : null;
+      records.push({
+        path: key,
+        size,
+        mtimeMs,
+        mtimeIso:
+          typeof value.mtimeIso === "string" && value.mtimeIso
+            ? value.mtimeIso
+            : null,
+        type:
+          typeof value.type === "string" && value.type ? value.type : null,
+        duration,
+        createdAt:
+          typeof value.createdAt === "number" &&
+          Number.isFinite(value.createdAt)
+            ? value.createdAt
+            : null,
+        updatedAt:
+          typeof value.updatedAt === "number" &&
+          Number.isFinite(value.updatedAt)
+            ? value.updatedAt
+            : null,
+      });
+    }
+  } catch (e) {
+    console.warn("failed to export legacy metadata records:", e);
+  }
+
+  try {
+    if (db && typeof db.close === "function") {
+      await db.close();
+    }
+  } catch (e) {}
+  legacyMetadataDb = null;
+
+  return records;
+}
+
 function createWindow() {
   const isMac = process.platform === "darwin";
 
@@ -155,7 +231,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     frame: false,
-    // On macOS, use hiddenInset to get native traffic light buttons
+    // on macos, use hiddenInset to get native traffic light buttons
     ...(isMac && {
       titleBarStyle: "hiddenInset",
       trafficLightPosition: { x: 12, y: 7 },
@@ -175,7 +251,7 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
   }
 
-  // Track fullscreen state for macOS traffic light spacer
+  // track fullscreen state for macOS traffic light spacer
   mainWindow.on("enter-full-screen", () => {
     mainWindow.webContents.send("window:fullscreen-change", true);
   });
@@ -428,6 +504,33 @@ ipcMain.handle("files:list", async (_event, folderPath) => {
   }
 });
 
+ipcMain.handle("metadata:exportLegacy", async () => {
+  try {
+    const records = await exportLegacyMetadataRecords();
+    return { records };
+  } catch (e) {
+    console.warn("metadata:exportLegacy failed:", e);
+    return { records: [] };
+  }
+});
+
+ipcMain.handle("metadata:deleteLegacy", async () => {
+  try {
+    if (legacyMetadataDb && typeof legacyMetadataDb.close === "function") {
+      await legacyMetadataDb.close();
+    }
+  } catch (e) {}
+  legacyMetadataDb = null;
+
+  try {
+    const userDataDir = app.getPath("userData");
+    const dbPath = path.join(userDataDir, "audinspect-metadata");
+    await fs.rm(dbPath, { recursive: true, force: true });
+  } catch (e) {}
+
+  return null;
+});
+
 ipcMain.handle("files:traverse", async (_event, folderPath) => {
   if (!folderPath) return null;
   async function build(dir) {
@@ -509,52 +612,18 @@ ipcMain.handle("shell:openExternal", async (_event, url) => {
 ipcMain.handle("file:decodeToWav", async (_event, filePath) => {
   if (!filePath) return null;
 
-  let ffmpegPath;
-  try {
-    ffmpegPath = require("ffmpeg-static");
-
-    console.log("FFmpeg path from require:", ffmpegPath);
-    console.log("App is packaged:", app.isPackaged);
-    console.log("Process resources path:", process.resourcesPath);
-
-    if (app.isPackaged) {
-      if (ffmpegPath && ffmpegPath.includes("app.asar")) {
-        ffmpegPath = ffmpegPath.replace(
-          /app\.asar(?!\.unpacked)/,
-          "app.asar.unpacked"
-        );
-        console.log("Replaced app.asar with app.asar.unpacked:", ffmpegPath);
-      } else if (!ffmpegPath) {
-        const platform = process.platform;
-        const ext = platform === "win32" ? ".exe" : "";
-        const binaryName = `ffmpeg${ext}`;
-
-        const resourcesPath = process.resourcesPath;
-        ffmpegPath = path.join(
-          resourcesPath,
-          "app.asar.unpacked",
-          "node_modules",
-          "ffmpeg-static",
-          binaryName
-        );
-        console.log("Manually constructed FFmpeg path:", ffmpegPath);
-      }
-    }
-
-    if (!ffmpegPath)
-      throw new Error(
-        "ffmpeg-static returned null path and could not construct fallback"
-      );
-
-    console.log("Final FFmpeg path:", ffmpegPath);
-  } catch (e) {
-    console.error("Failed to resolve ffmpeg-static path:", e);
+  // check if binaries are available
+  if (!areBinariesAvailable()) {
     return {
       data: null,
-      error: `Failed to resolve ffmpeg path: ${e.message}`,
+      error: "FFmpeg binaries not available. Please wait for download to complete.",
       code: null,
+      needsDownload: true,
     };
   }
+
+  const ffmpegPath = getFFmpegPath();
+  console.log("Using FFmpeg path:", ffmpegPath);
 
   return new Promise((resolve) => {
     try {
@@ -602,108 +671,7 @@ ipcMain.handle("file:decodeToWav", async (_event, filePath) => {
   });
 });
 
-let cachedFfprobePath = null;
-let metadataDb = null;
-
-function getFfprobePath() {
-  if (cachedFfprobePath) return cachedFfprobePath;
-
-  const ffprobeStatic = require("ffprobe-static");
-  let ffprobePath =
-    ffprobeStatic && typeof ffprobeStatic === "object" && ffprobeStatic.path
-      ? ffprobeStatic.path
-      : ffprobeStatic;
-
-  if (app.isPackaged) {
-    if (ffprobePath && ffprobePath.includes("app.asar")) {
-      ffprobePath = ffprobePath.replace(
-        /app\.asar(?!\.unpacked)/,
-        "app.asar.unpacked"
-      );
-    } else if (!ffprobePath) {
-      const platform = process.platform;
-      const ext = platform === "win32" ? ".exe" : "";
-      const binaryName = `ffprobe${ext}`;
-      const resourcesPath = process.resourcesPath;
-      ffprobePath = path.join(
-        resourcesPath,
-        "app.asar.unpacked",
-        "node_modules",
-        "ffprobe-static",
-        binaryName
-      );
-    }
-  }
-
-  if (!ffprobePath)
-    throw new Error(
-      "ffprobe-static returned null path and could not construct fallback"
-    );
-
-  cachedFfprobePath = ffprobePath;
-  return ffprobePath;
-}
-
-function getMetadataDb() {
-  if (metadataDb) return metadataDb;
-  const userDataDir = app.getPath("userData");
-  const dbPath = path.join(userDataDir, "audinspect-metadata");
-  metadataDb = new Level(dbPath, { valueEncoding: "json" });
-  return metadataDb;
-}
-
-async function upsertTrackMetadata(data) {
-  if (!data || !data.path) return;
-  const db = getMetadataDb();
-  const now = Date.now();
-  let existing = null;
-  try {
-    existing = await db.get(data.path);
-  } catch (e) {}
-
-  const record = {
-    path: data.path,
-    size:
-      typeof data.size === "number"
-        ? data.size
-        : existing && typeof existing.size === "number"
-        ? existing.size
-        : null,
-    mtimeMs:
-      typeof data.mtimeMs === "number"
-        ? data.mtimeMs
-        : existing && typeof existing.mtimeMs === "number"
-        ? existing.mtimeMs
-        : null,
-    type: data.type || (existing && existing.type ? existing.type : null),
-    duration:
-      typeof data.duration === "number"
-        ? data.duration
-        : existing && typeof existing.duration === "number"
-        ? existing.duration
-        : null,
-    createdAt:
-      existing && typeof existing.createdAt === "number"
-        ? existing.createdAt
-        : now,
-    updatedAt: now,
-  };
-
-  try {
-    await db.put(data.path, record);
-  } catch (e) {}
-}
-
-async function getCachedTrackMetadata(trackPath) {
-  if (!trackPath) return null;
-  const db = getMetadataDb();
-  try {
-    const row = await db.get(trackPath);
-    return row || null;
-  } catch (e) {
-    return null;
-  }
-}
+// ffprobe path is now provided by ffmpeg-downloader module
 
 function runFfprobeDuration(ffprobePath, filePath) {
   return new Promise((resolve) => {
@@ -776,18 +744,16 @@ function runFfprobeDuration(ffprobePath, filePath) {
 ipcMain.handle("file:probeDuration", async (_event, filePath) => {
   if (!filePath) return null;
 
-  let ffprobePath;
-  try {
-    ffprobePath = getFfprobePath();
-  } catch (e) {
-    console.error("Failed to resolve ffprobe-static path:", e);
+  if (!areBinariesAvailable()) {
     return {
       duration: null,
-      error: `Failed to resolve ffprobe path: ${e.message}`,
+      error: "FFprobe binaries not available. Please wait for download to complete.",
       code: null,
+      needsDownload: true,
     };
   }
 
+  const ffprobePath = getFFprobePath();
   return runFfprobeDuration(ffprobePath, filePath);
 });
 
@@ -798,16 +764,12 @@ ipcMain.handle("files:probeDurations", async (event, paths) => {
   ];
   if (!uniquePaths.length) return [];
 
-  let ffprobePath;
-  try {
-    ffprobePath = getFfprobePath();
-  } catch (e) {
-    console.error(
-      "Failed to resolve ffprobe-static path in files:probeDurations:",
-      e
-    );
+  if (!areBinariesAvailable()) {
+    console.warn("FFprobe binaries not available for batch probe");
     return [];
   }
+
+  const ffprobePath = getFFprobePath();
 
   const results = [];
   for (const p of uniquePaths) {
@@ -822,30 +784,9 @@ ipcMain.handle("files:probeDurations", async (event, paths) => {
       type = ext || null;
     } catch (e) {}
 
-    let res;
-    let usedCache = false;
-    if (size != null && mtimeMs != null) {
-      try {
-        const cached = await getCachedTrackMetadata(p);
-        if (
-          cached &&
-          typeof cached.duration === "number" &&
-          Number.isFinite(cached.duration) &&
-          cached.duration > 0 &&
-          (typeof cached.size !== "number" || cached.size === size) &&
-          (typeof cached.mtimeMs !== "number" || cached.mtimeMs === mtimeMs)
-        ) {
-          res = { duration: cached.duration, error: null, code: 0 };
-          usedCache = true;
-        }
-      } catch (e) {}
-    }
+    const res = await runFfprobeDuration(ffprobePath, p);
 
-    if (!res) {
-      res = await runFfprobeDuration(ffprobePath, p);
-    }
-
-    results.push({ path: p, ...res });
+    results.push({ path: p, size, mtimeMs, type, ...res });
 
     try {
       if (
@@ -866,27 +807,45 @@ ipcMain.handle("files:probeDurations", async (event, paths) => {
         });
       }
     } catch (e) {}
-
-    if (
-      !usedCache &&
-      res &&
-      typeof res.duration === "number" &&
-      Number.isFinite(res.duration) &&
-      res.duration > 0
-    ) {
-      try {
-        await upsertTrackMetadata({
-          path: p,
-          size,
-          mtimeMs,
-          type,
-          duration: res.duration,
-        });
-      } catch (e) {}
-    }
   }
 
   return results;
+});
+
+// binary download handlers
+ipcMain.handle("binaries:status", async () => {
+  return {
+    available: areBinariesAvailable(),
+    ffmpegPath: areBinariesAvailable() ? getFFmpegPath() : null,
+    ffprobePath: areBinariesAvailable() ? getFFprobePath() : null,
+  };
+});
+
+ipcMain.handle("binaries:download", async (event) => {
+  if (areBinariesAvailable()) {
+    return { success: true, alreadyAvailable: true };
+  }
+
+  try {
+    const result = await ensureBinariesExist((binary, downloaded, total) => {
+      // send progress to renderer
+      try {
+        event.sender.send("binaries:downloadProgress", {
+          binary,
+          downloaded,
+          total,
+          percent: Math.round((downloaded / total) * 100),
+        });
+      } catch (e) {
+        // sender may be destroyed
+      }
+    });
+
+    return { success: true, ...result };
+  } catch (e) {
+    console.error("Failed to download binaries:", e);
+    return { success: false, error: e.message };
+  }
 });
 
 app.whenReady().then(() => {

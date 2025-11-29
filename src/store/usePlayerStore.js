@@ -31,15 +31,22 @@ try {
   }
 } catch (e) {}
 
-// Playback speed always resets to 1x on startup (not persisted)
+// playback speed always resets to 1x on startup (not persisted)
 const initialPlaybackSpeed = 1;
 
 let initialWavesurferTheme = "classic";
 try {
   if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
     const savedTheme = localStorage.getItem("wavesurferTheme");
-    if (savedTheme && ["classic", "precise", "minimal"].includes(savedTheme)) {
+    const allowedNew = ["default", "sleek", "classic"];
+    if (savedTheme && allowedNew.includes(savedTheme)) {
       initialWavesurferTheme = savedTheme;
+    } else if (savedTheme === "precise") {
+      initialWavesurferTheme = "default";
+    } else if (savedTheme === "minimal") {
+      initialWavesurferTheme = "sleek";
+    } else if (savedTheme === "classic") {
+      initialWavesurferTheme = "classic";
     }
   }
 } catch (e) {}
@@ -101,7 +108,7 @@ const usePlayerStore = create((set, get) => ({
   durations: {},
   fileMetadata: {},
 
-  // UI state
+  // ui state
   searchQuery: "",
   sortMode: "none",
   toast: null,
@@ -109,7 +116,7 @@ const usePlayerStore = create((set, get) => ({
   isDragging: false,
   dragTarget: null,
 
-  // global UI
+  // global ui
   accentColor: initialAccentColor,
   isSettingsOpen: false,
   isWindowMaximized: false,
@@ -148,7 +155,8 @@ const usePlayerStore = create((set, get) => ({
       return { playbackSpeed: clamped };
     }),
   setWavesurferTheme: (theme) => {
-    if (!theme || !["classic", "precise", "minimal"].includes(theme)) return;
+    const allowed = ["default", "sleek", "classic"];
+    if (!theme || !allowed.includes(theme)) return;
     set({ wavesurferTheme: theme });
     try {
       if (typeof localStorage !== "undefined") {
@@ -208,7 +216,7 @@ const usePlayerStore = create((set, get) => ({
   toggleWindowMaximized: () =>
     set((state) => ({ isWindowMaximized: !state.isWindowMaximized })),
 
-  // sort mode + folder path with localStorage integration
+  // sort mode + folder path with localstorage integration
   setCurrentFolderPath: (currentFolderPath) => {
     set({ currentFolderPath });
     // when folder changes, try to restore sort mode from storage

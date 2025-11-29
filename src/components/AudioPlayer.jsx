@@ -6,6 +6,12 @@ import DropConfirmModal from "./DropConfirmModal";
 import PlayerArea from "./PlayerArea";
 import PlaylistArea from "./PlaylistArea";
 import usePlayerStore from "../store/usePlayerStore";
+import {
+  initMetadataClient,
+  saveMetadataFromStatResults,
+  saveDurationsFromProbeResults,
+  getCachedDurationsForPaths,
+} from "../utils/metadataClient";
 
 export default function AudioPlayer() {
   const containerRef = useRef(null);
@@ -74,6 +80,12 @@ export default function AudioPlayer() {
   } = usePlayerStore();
 
   useEffect(() => {
+    try {
+      initMetadataClient().catch(() => {});
+    } catch (e) {}
+  }, []);
+
+  useEffect(() => {
     if (!window.electronAPI) return;
 
     const unsubscribes = [];
@@ -119,9 +131,10 @@ export default function AudioPlayer() {
         .getPropertyValue("--accent-color")
         .trim() || "#0050ff";
 
-    // Theme configurations
+    // theme configurations
     const themes = {
-      classic: {
+      // detailed waveform
+      default: {
         waveColor: "#333333",
         progressColor: accentColor,
         height: 250,
@@ -129,7 +142,9 @@ export default function AudioPlayer() {
         barGap: 0,
         barRadius: 0,
       },
-      precise: {
+
+      // rounded bars
+      sleek: {
         waveColor: "#444444",
         progressColor: accentColor,
         height: 250,
@@ -137,7 +152,9 @@ export default function AudioPlayer() {
         barGap: 2,
         barRadius: 3,
       },
-      minimal: {
+
+      // flat bars
+      classic: {
         waveColor: "#2a2a2a",
         progressColor: accentColor,
         height: 250,
@@ -159,7 +176,7 @@ export default function AudioPlayer() {
       hideScrollbar: true,
     });
 
-    // REGISTER hover plugin if enabled
+    // register hover plugin if enabled
     if (wavesurferShowHover) {
       try {
         hoverPluginRef.current = Hover.create({
@@ -220,12 +237,10 @@ export default function AudioPlayer() {
 
     try {
       inst.setVolume && inst.setVolume(volume / 100);
-      // Apply pitch preservation setting
+      // apply pitch preservation setting
       const mediaEl = inst.getMediaElement?.();
       if (mediaEl) {
         mediaEl.preservesPitch = preservePitch;
-        mediaEl.mozPreservesPitch = preservePitch; // Firefox fallback
-        mediaEl.webkitPreservesPitch = preservePitch; // Safari fallback
       }
       inst.setPlaybackRate && inst.setPlaybackRate(playbackSpeed);
     } catch (e) {}
@@ -241,18 +256,18 @@ export default function AudioPlayer() {
     }
   }, [volume]);
 
-  // Apply audio output device changes
+  // apply audio output device changes
   useEffect(() => {
     if (!audioOutputDevice || !wsRef.current) return;
 
     const applyDevice = async () => {
       try {
-        // WaveSurfer has setSinkId method on its media element
+        // wavesurfer has setSinkId method on its media element
         const mediaElement = wsRef.current.getMediaElement?.();
         if (mediaElement && typeof mediaElement.setSinkId === "function") {
           await mediaElement.setSinkId(audioOutputDevice);
         } else if (typeof wsRef.current.setSinkId === "function") {
-          // Some versions expose setSinkId directly on WaveSurfer
+          // some versions expose setSinkId directly on WaveSurfer
           await wsRef.current.setSinkId(audioOutputDevice);
         }
       } catch (error) {
@@ -263,7 +278,7 @@ export default function AudioPlayer() {
     applyDevice();
   }, [audioOutputDevice]);
 
-  // Update playback speed when it changes
+  // update playback speed when it changes
   useEffect(() => {
     if (wsRef.current && typeof wsRef.current.setPlaybackRate === "function") {
       try {
@@ -272,24 +287,22 @@ export default function AudioPlayer() {
         const prevTime = ws.getCurrentTime ? ws.getCurrentTime() : 0;
         const dur = ws.getDuration ? ws.getDuration() : 0;
 
-        // Apply pitch preservation setting
+        // apply pitch preservation setting
         const mediaEl = ws.getMediaElement?.();
         if (mediaEl) {
           mediaEl.preservesPitch = preservePitch;
-          mediaEl.mozPreservesPitch = preservePitch;
-          mediaEl.webkitPreservesPitch = preservePitch;
         }
 
         ws.setPlaybackRate(playbackSpeed);
 
-        // Force re-seek to the same absolute time (protect against internal rounding glitches)
+        // force re-seek to the same absolute time (protect against internal rounding glitches)
         if (dur > 0 && prevTime >= 0 && prevTime <= dur) {
           const fraction = Math.min(Math.max(prevTime / dur, 0), 1);
-          // Use requestAnimationFrame to allow internal nodes to settle before seeking
+          // use requestAnimationFrame to allow internal nodes to settle before seeking
           requestAnimationFrame(() => {
             try {
               ws.seekTo(fraction);
-              // If it was playing, resume to avoid a tiny pause artifact
+              // if it was playing, resume to avoid a tiny pause artifact
               if (wasPlaying) ws.play();
             } catch (e) {}
           });
@@ -300,30 +313,28 @@ export default function AudioPlayer() {
     }
   }, [playbackSpeed, preservePitch]);
 
-  // Update preservePitch setting when it changes
+  // update preservePitch setting when it changes
   useEffect(() => {
     if (wsRef.current) {
       try {
         const mediaEl = wsRef.current.getMediaElement?.();
         if (mediaEl) {
           mediaEl.preservesPitch = preservePitch;
-          mediaEl.mozPreservesPitch = preservePitch;
-          mediaEl.webkitPreservesPitch = preservePitch;
         }
       } catch (e) {}
     }
   }, [preservePitch]);
 
-  // Update wavesurfer when theme changes
+  // update wavesurfer when theme changes
   useEffect(() => {
     if (wsRef.current) {
-      // Capture current state before destroying
+      // capture current state before destroying
       const wasPlaying = isPlaying;
       const currentTime = wsRef.current.getCurrentTime
         ? wsRef.current.getCurrentTime()
         : 0;
 
-      // Stop playback and update state before destroying
+      // stop playback and update state before destroying
       try {
         if (wsRef.current.isPlaying && wsRef.current.isPlaying()) {
           wsRef.current.pause();
@@ -341,7 +352,7 @@ export default function AudioPlayer() {
       wsRef.current = null;
       createWaveSurfer();
 
-      // Reload current file if there was one
+      // reload current file if there was one
       if (files && files.length > 0 && currentIndex >= 0) {
         loadAtIndex(currentIndex, files, { autoPlay: wasPlaying }).then(() => {
           if (wsRef.current && currentTime > 0) {
@@ -564,6 +575,10 @@ export default function AudioPlayer() {
           }
         });
         setFileMetadata(next);
+
+        try {
+          await saveMetadataFromStatResults(result);
+        } catch (e) {}
       } catch (e) {
         console.warn("Failed to load file metadata:", e);
       }
@@ -604,6 +619,10 @@ export default function AudioPlayer() {
       if (changed) {
         state.setFileMetadata(next);
       }
+
+      try {
+        saveMetadataFromStatResults(items);
+      } catch (e) {}
     });
 
     return () => {
@@ -656,6 +675,60 @@ export default function AudioPlayer() {
       }
     };
   }, [files, currentIndex, duration]);
+
+  useEffect(() => {
+    const run = async () => {
+      const baseList = Array.isArray(files) ? files : [];
+      const uniquePaths = [...new Set(baseList.filter(Boolean))];
+      if (!uniquePaths.length) return;
+
+      const state = usePlayerStore.getState();
+      const metaMap =
+        state.fileMetadata && typeof state.fileMetadata === "object"
+          ? state.fileMetadata
+          : {};
+
+      try {
+        const cached = await getCachedDurationsForPaths(uniquePaths, metaMap);
+        if (!Array.isArray(cached) || !cached.length) return;
+
+        const map = { ...(durationsRef.current || {}) };
+        const attempts = { ...(ffprobeAttemptsRef.current || {}) };
+
+        cached.forEach((item) => {
+          if (
+            item &&
+            item.path &&
+            typeof item.duration === "number" &&
+            Number.isFinite(item.duration) &&
+            item.duration > 0
+          ) {
+            map[item.path] = item.duration;
+            attempts[item.path] = true;
+          }
+        });
+
+        durationsRef.current = map;
+        ffprobeAttemptsRef.current = attempts;
+        setDurations({ ...map });
+
+        const list = Array.isArray(state.files) ? state.files : [];
+        const currentPath =
+          state.currentIndex >= 0 && list[state.currentIndex]
+            ? list[state.currentIndex]
+            : null;
+        if (
+          currentPath &&
+          map[currentPath] &&
+          (!duration || !Number.isFinite(duration) || duration <= 0)
+        ) {
+          setDuration(map[currentPath]);
+        }
+      } catch (e) {}
+    };
+
+    run();
+  }, [files, fileMetadata, currentIndex, duration]);
 
   useEffect(() => {
     if (
@@ -713,6 +786,10 @@ export default function AudioPlayer() {
         ) {
           setDuration(map[currentPath]);
         }
+
+        try {
+          await saveDurationsFromProbeResults(result);
+        } catch (e) {}
       } catch (e) {}
     };
 
@@ -1030,23 +1107,22 @@ export default function AudioPlayer() {
           }
           setIsLoaded(true);
           
-          // Apply saved playback settings
+          // apply saved playback settings
           const storeState = usePlayerStore.getState();
           try {
-            // Apply playback speed
+            // apply playback speed
             if (wsNow.setPlaybackRate && storeState.playbackSpeed) {
               wsNow.setPlaybackRate(storeState.playbackSpeed);
             }
             
             const mediaElement = wsNow.getMediaElement?.();
             if (mediaElement) {
-              // Apply pitch preservation setting
+              // apply pitch preservation setting
               const shouldPreservePitch = storeState.preservePitch;
               mediaElement.preservesPitch = shouldPreservePitch;
-              mediaElement.mozPreservesPitch = shouldPreservePitch;
-              mediaElement.webkitPreservesPitch = shouldPreservePitch;
+          
               
-              // Apply audio output device
+              // apply audio output device
               if (storeState.audioOutputDevice && typeof mediaElement.setSinkId === "function") {
                 mediaElement.setSinkId(storeState.audioOutputDevice).catch(() => {});
               }
@@ -1083,6 +1159,17 @@ export default function AudioPlayer() {
               URL.revokeObjectURL(currentLoadRef.current.url);
             } catch (e) {}
             currentLoadRef.current.url = null;
+          }
+          try {
+            if (
+              currentLoadRef.current &&
+              typeof currentLoadRef.current.errorCleanup === "function"
+            ) {
+              currentLoadRef.current.errorCleanup();
+            }
+          } catch (e) {}
+          if (currentLoadRef.current) {
+            currentLoadRef.current.errorCleanup = null;
           }
         };
         wsRef.current.once && wsRef.current.once("ready", handleReady);
@@ -1340,7 +1427,7 @@ export default function AudioPlayer() {
         nextSelectedIndex = indexByPath.get(prevSelectedPath);
       }
 
-      // Clear ffprobe attempts for new files so durations get probed
+      // clear ffprobe attempts for new files so durations get probed
       if (addedList.length && ffprobeAttemptsRef.current) {
         const attempts = ffprobeAttemptsRef.current;
         addedList.forEach((p) => {
@@ -1354,7 +1441,7 @@ export default function AudioPlayer() {
       state.setCurrentIndex(nextCurrentIndex);
       state.setSelectedIndex(nextSelectedIndex);
 
-      // Explicitly fetch metadata and durations for newly added files
+      // explicitly fetch metadata and durations for newly added files
       if (
         addedList.length &&
         window.electronAPI &&
@@ -1639,7 +1726,9 @@ export default function AudioPlayer() {
 
   function seekTo(evt) {
     if (!wsRef.current) return;
+    if (!duration || !Number.isFinite(duration) || duration <= 0) return;
     const rect = evt.currentTarget.getBoundingClientRect();
+    if (!rect.width) return;
     const x = evt.clientX - rect.left;
     const t = (x / rect.width) * duration;
     wsRef.current.seekTo(t / duration);
@@ -1829,7 +1918,7 @@ export default function AudioPlayer() {
       clearTimeout(dragTimeoutRef.current);
     }
 
-    // Don't allow adding files when a folder is open
+    // don't allow adding files when a folder is open
     if (currentFolderPath) {
       showToast("close the current folder to add files");
       return;
