@@ -41,13 +41,17 @@ jobs:
           node-version: 22
           cache: "npm"
 
-      - name: Setup Python for node-gyp
+      - name: Set up Python 3.11 for node-gyp (macOS)
+        if: startsWith(matrix.os, 'macos')
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: '3.11'
 
-      - name: Install setuptools (provides distutils for Python 3.12+)
-        run: pip install setuptools
+      - name: Configure node-gyp Python (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          echo "PYTHON=$(which python)" >> $GITHUB_ENV
+          npm config set python "$(which python)"
 
       - name: Install Dependencies
         run: npm install
