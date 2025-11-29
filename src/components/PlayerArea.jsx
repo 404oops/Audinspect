@@ -313,7 +313,7 @@ export default function PlayerArea({
                                 : "bg-pure-black text-white hover:bg-white hover:text-pure-black"
                             }`}
                           >
-                            <span>{`${label}x ${label === '1' ? '(default)' : ''}`}</span>
+                            <span>{`${label}x ${speed === 1 ? '(default)' : ''}`}</span>
                           </button>
                         );
                       })}
