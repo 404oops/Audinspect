@@ -41,6 +41,19 @@ jobs:
           node-version: 22
           cache: "npm"
 
+      - name: Set up Python 3.11 for node-gyp (Windows)
+        if: startsWith(matrix.os, 'windows')
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Configure node-gyp Python (Windows)
+        if: startsWith(matrix.os, 'windows')
+        shell: pwsh
+        run: |
+          $pythonPath = (Get-Command python).Source
+          "PYTHON=$pythonPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Set up Python 3.11 for node-gyp (macOS)
         if: startsWith(matrix.os, 'macos')
         uses: actions/setup-python@v5
