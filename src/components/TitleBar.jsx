@@ -34,7 +34,7 @@ export default function TitleBar({ onSettingsClick }) {
   return (
     <div className="titlebar bg-pure-black border-b-2 border-white flex items-center justify-between h-32 px-16 select-none">
       <div className="flex items-center gap-2">
-        {/* On macOS, leave space for native traffic light buttons (hidden in fullscreen) */}
+        {/* on macos, leave space for native traffic light buttons (hidden in fullscreen) */}
         {isMac && !isFullscreen && <div className="w-[53px]" />}
         <div className="text-sm font-bold text-white uppercase tracking-wider">
           audinspect

@@ -1,10 +1,10 @@
 {
   "name": "audinspect",
-  "version": "2.0.0",
+  "version": "2.1.0a",
   "description": "",
   "main": "electron/main.js",
   "scripts": {
-    "dev": "NODE_ENV=development concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "dev": "cross-env NODE_ENV=development concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "vite build",
     "package": "npm run build && electron-builder && node scripts/clean-build.js",
     "package:win_x64": "npm run build && electron-builder --win --x64 && node scripts/clean-build.js",
@@ -17,17 +17,13 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "GPL-3.0-only",
   "type": "commonjs",
   "build": {
     "appId": "com.404oops.audinspect",
     "icon": "resources/icon.png",
     "publish": null,
     "asar": true,
-    "asarUnpack": [
-      "**/node_modules/ffmpeg-static/**",
-      "**/node_modules/ffprobe-static/**"
-    ],
     "files": [
       "dist/*.html",
       "dist/assets/*",
@@ -35,13 +31,61 @@
       "package.json",
       "!**/node_modules/**/*.md",
       "!**/node_modules/**/*.d.ts",
+      "!**/node_modules/**/*.d.cts",
+      "!**/node_modules/**/*.d.mts",
       "!**/node_modules/**/*.map",
+      "!**/node_modules/**/*.ts",
+      "!**/node_modules/**/*.tsx",
+      "!**/node_modules/**/*.coffee",
+      "!**/node_modules/**/*.flow",
       "!**/node_modules/**/test/**",
       "!**/node_modules/**/tests/**",
       "!**/node_modules/**/__tests__/**",
       "!**/node_modules/**/docs/**",
+      "!**/node_modules/**/doc/**",
+      "!**/node_modules/**/documentation/**",
       "!**/node_modules/**/example/**",
-      "!**/node_modules/**/examples/**"
+      "!**/node_modules/**/examples/**",
+      "!**/node_modules/**/.github/**",
+      "!**/node_modules/**/.vscode/**",
+      "!**/node_modules/**/.idea/**",
+      "!**/node_modules/**/CHANGELOG*",
+      "!**/node_modules/**/HISTORY*",
+      "!**/node_modules/**/CHANGES*",
+      "!**/node_modules/**/AUTHORS*",
+      "!**/node_modules/**/CONTRIBUTORS*",
+      "!**/node_modules/**/*.gyp",
+      "!**/node_modules/**/*.gypi",
+      "!**/node_modules/**/binding.gyp",
+      "!**/node_modules/**/.npmignore",
+      "!**/node_modules/**/.eslintrc*",
+      "!**/node_modules/**/.prettierrc*",
+      "!**/node_modules/**/.editorconfig",
+      "!**/node_modules/**/.travis.yml",
+      "!**/node_modules/**/.babelrc*",
+      "!**/node_modules/**/tsconfig*.json",
+      "!**/node_modules/**/jest.config.*",
+      "!**/node_modules/**/karma.conf.*",
+      "!**/node_modules/**/webpack.config.*",
+      "!**/node_modules/**/rollup.config.*",
+      "!**/node_modules/**/Makefile",
+      "!**/node_modules/**/Gruntfile*",
+      "!**/node_modules/**/gulpfile*",
+      "!**/node_modules/**/*.min.js.map",
+      "!**/node_modules/**/*.mjs.map",
+      "!**/node_modules/**/*.cjs.map",
+      "!**/node_modules/**/src/**",
+      "!**/node_modules/**/source/**",
+      "!**/node_modules/**/coverage/**",
+      "!**/node_modules/**/.nyc_output/**",
+      "!**/node_modules/**/benchmark/**",
+      "!**/node_modules/**/benchmarks/**",
+      "!**/node_modules/**/fixture/**",
+      "!**/node_modules/**/fixtures/**",
+      "!**/node_modules/**/__mocks__/**",
+      "!**/node_modules/**/__fixtures__/**",
+      "!**/node_modules/ffmpeg-static/**",
+      "!**/node_modules/ffprobe-static/**"
     ],
     "directories": {
       "output": "build"
@@ -54,9 +98,11 @@
         }
       ],
       "files": [
-        "!**/node_modules/ffmpeg-static/ffmpeg",
-        "!**/node_modules/ffprobe-static/bin/darwin/**",
-        "!**/node_modules/ffprobe-static/bin/linux/**"
+        "!**/prebuilds/darwin-*/**",
+        "!**/prebuilds/linux-*/**",
+        "!**/prebuilds/*-arm/**",
+        "!**/prebuilds/*-arm64/**",
+        "!**/prebuilds/*-ia32/**"
       ]
     },
     "nsis": {
@@ -72,9 +118,9 @@
         }
       ],
       "files": [
-        "!**/node_modules/ffmpeg-static/ffmpeg.exe",
-        "!**/node_modules/ffprobe-static/bin/win32/**",
-        "!**/node_modules/ffprobe-static/bin/linux/**"
+        "!**/prebuilds/win32-*/**",
+        "!**/prebuilds/linux-*/**",
+        "!**/prebuilds/*-ia32/**"
       ]
     },
     "linux": {
@@ -82,32 +128,38 @@
         "AppImage"
       ],
       "files": [
-        "!**/node_modules/ffmpeg-static/ffmpeg.exe",
-        "!**/node_modules/ffprobe-static/bin/win32/**",
-        "!**/node_modules/ffprobe-static/bin/darwin/**"
+        "!**/prebuilds/win32-*/**",
+        "!**/prebuilds/darwin-*/**",
+        "!**/prebuilds/*-ia32/**"
       ]
     },
     "compression": "maximum"
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.22",
     "concurrently": "^9.2.1",
+    "cross-env": "^7.0.3",
     "electron": "^39.2.3",
-    "@electron/rebuild": "^3.7.1",
     "electron-builder": "^25.1.8",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.18",
+    "upx": "^1.0.6",
     "vite": "^7.2.4",
     "wait-on": "^9.0.3"
   },
-  "dependencies": {
-    "classic-level": "^3.0.0",
+  "optionalDependencies": {
     "ffmpeg-static": "^5.3.0",
-    "ffprobe-static": "^3.1.0",
+    "ffprobe-static": "^3.1.0"
+  },
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "classic-level": "^3.0.0",
     "level": "^10.0.0",
     "level-supports": "^6.0.0",
     "level-transcoder": "^1.0.1",
+    "dexie": "^4.2.1",
     "lucide-react": "^0.554.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
