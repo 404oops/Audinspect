@@ -1,6 +1,6 @@
 {
   "name": "audinspect",
-  "version": "2.1.0a",
+  "version": "2.1.0",
   "description": "",
   "main": "electron/main.js",
   "scripts": {
