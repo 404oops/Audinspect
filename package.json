@@ -1,6 +1,6 @@
 {
   "name": "audinspect",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "",
   "main": "electron/main.js",
   "scripts": {
@@ -94,7 +94,10 @@
       "target": [
         {
           "target": "nsis",
-          "arch": "x64"
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "files": [
@@ -114,7 +117,10 @@
       "target": [
         {
           "target": "dmg",
-          "arch": "arm64"
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "files": [
