@@ -30,7 +30,10 @@ export default function AudioPlayer() {
   const timeDisplayRef = useRef(null);
   const dragTimeoutRef = useRef(null);
   const hoverPluginRef = useRef(null);
-  const hopFnRef = useRef(() => {});
+  const hopFnRef = useRef(() => { });
+  const togglePlayFnRef = useRef(() => { });
+  const nextFnRef = useRef(() => { });
+  const prevFnRef = useRef(() => { });
   const hasFolderWatchRef = useRef(false);
 
   const {
@@ -81,8 +84,8 @@ export default function AudioPlayer() {
 
   useEffect(() => {
     try {
-      initMetadataClient().catch(() => {});
-    } catch (e) {}
+      initMetadataClient().catch(() => { });
+    } catch (e) { }
   }, []);
 
   useEffect(() => {
@@ -119,7 +122,7 @@ export default function AudioPlayer() {
         if (typeof fn === "function") {
           try {
             fn();
-          } catch (e) {}
+          } catch (e) { }
         }
       });
     };
@@ -202,7 +205,19 @@ export default function AudioPlayer() {
     }
 
     inst.on("interaction", () => {
-      if (inst.isPlaying()) inst.play();
+      // Get current playback state and user preference
+      const { playOnSeekWhenPaused } = usePlayerStore.getState();
+      const wasPlaying = inst.isPlaying();
+
+      // Resume playback if:
+      // 1. Was already playing, OR
+      // 2. User enabled playback-on-seek when paused
+      if (wasPlaying || playOnSeekWhenPaused) {
+        inst.play();
+        // Synchronize state after starting playback
+        isPlayingRef.current = true;
+        setIsPlaying(true);
+      }
     });
     inst.on("audioprocess", () => {
       try {
@@ -215,7 +230,7 @@ export default function AudioPlayer() {
             .toString()
             .padStart(2, "0")}`;
         }
-      } catch (e) {}
+      } catch (e) { }
     });
     inst.on("finish", () => {
       isPlayingRef.current = false;
@@ -232,7 +247,7 @@ export default function AudioPlayer() {
             .toString()
             .padStart(2, "0")}`;
         }
-      } catch (e) {}
+      } catch (e) { }
     });
 
     try {
@@ -243,7 +258,7 @@ export default function AudioPlayer() {
         mediaEl.preservesPitch = preservePitch;
       }
       inst.setPlaybackRate && inst.setPlaybackRate(playbackSpeed);
-    } catch (e) {}
+    } catch (e) { }
     wsRef.current = inst;
     return inst;
   };
@@ -252,7 +267,7 @@ export default function AudioPlayer() {
     if (wsRef.current && typeof wsRef.current.setVolume === "function") {
       try {
         wsRef.current.setVolume(volume / 100);
-      } catch (e) {}
+      } catch (e) { }
     }
   }, [volume]);
 
@@ -304,7 +319,7 @@ export default function AudioPlayer() {
               ws.seekTo(fraction);
               // if it was playing, resume to avoid a tiny pause artifact
               if (wasPlaying) ws.play();
-            } catch (e) {}
+            } catch (e) { }
           });
         }
       } catch (e) {
@@ -321,7 +336,7 @@ export default function AudioPlayer() {
         if (mediaEl) {
           mediaEl.preservesPitch = preservePitch;
         }
-      } catch (e) {}
+      } catch (e) { }
     }
   }, [preservePitch]);
 
@@ -340,14 +355,14 @@ export default function AudioPlayer() {
           wsRef.current.pause();
         }
         wsRef.current.stop && wsRef.current.stop();
-      } catch (e) {}
+      } catch (e) { }
 
       isPlayingRef.current = false;
       setIsPlaying(false);
 
       try {
         wsRef.current.destroy();
-      } catch (e) {}
+      } catch (e) { }
 
       wsRef.current = null;
       createWaveSurfer();
@@ -431,14 +446,14 @@ export default function AudioPlayer() {
       ) {
         try {
           currentLoadRef.current.cleanup();
-        } catch (e) {}
+        } catch (e) { }
         currentLoadRef.current.cleanup = null;
         currentLoadRef.current.url = null;
       }
       if (wsRef.current) {
         try {
           wsRef.current.destroy();
-        } catch (e) {}
+        } catch (e) { }
         wsRef.current = null;
       }
 
@@ -448,7 +463,7 @@ export default function AudioPlayer() {
       ) {
         try {
           window.electronAPI.unwatchFolder();
-        } catch (e) {}
+        } catch (e) { }
       }
       hasFolderWatchRef.current = false;
     };
@@ -564,7 +579,7 @@ export default function AudioPlayer() {
         const currentState = usePlayerStore.getState();
         const base =
           currentState.fileMetadata &&
-          typeof currentState.fileMetadata === "object"
+            typeof currentState.fileMetadata === "object"
             ? currentState.fileMetadata
             : {};
         const next = { ...base };
@@ -578,7 +593,7 @@ export default function AudioPlayer() {
 
         try {
           await saveMetadataFromStatResults(result);
-        } catch (e) {}
+        } catch (e) { }
       } catch (e) {
         console.warn("Failed to load file metadata:", e);
       }
@@ -622,14 +637,14 @@ export default function AudioPlayer() {
 
       try {
         saveMetadataFromStatResults(items);
-      } catch (e) {}
+      } catch (e) { }
     });
 
     return () => {
       if (typeof unsubscribe === "function") {
         try {
           unsubscribe();
-        } catch (e) {}
+        } catch (e) { }
       }
     };
   }, []);
@@ -671,7 +686,7 @@ export default function AudioPlayer() {
       if (typeof unsubscribe === "function") {
         try {
           unsubscribe();
-        } catch (e) {}
+        } catch (e) { }
       }
     };
   }, [files, currentIndex, duration]);
@@ -724,7 +739,7 @@ export default function AudioPlayer() {
         ) {
           setDuration(map[currentPath]);
         }
-      } catch (e) {}
+      } catch (e) { }
     };
 
     run();
@@ -789,8 +804,8 @@ export default function AudioPlayer() {
 
         try {
           await saveDurationsFromProbeResults(result);
-        } catch (e) {}
-      } catch (e) {}
+        } catch (e) { }
+      } catch (e) { }
     };
 
     run();
@@ -827,7 +842,7 @@ export default function AudioPlayer() {
         }
       });
       setFileMetadata(map);
-    } catch (e) {}
+    } catch (e) { }
   };
 
   async function handleOpenFolder() {
@@ -851,10 +866,10 @@ export default function AudioPlayer() {
       if (wsRef.current) {
         try {
           wsRef.current.pause && wsRef.current.pause();
-        } catch (e) {}
+        } catch (e) { }
         try {
           wsRef.current.destroy();
-        } catch (e) {}
+        } catch (e) { }
         wsRef.current = null;
       }
 
@@ -864,7 +879,7 @@ export default function AudioPlayer() {
       ) {
         try {
           currentLoadRef.current.cleanup();
-        } catch (e) {}
+        } catch (e) { }
         currentLoadRef.current.cleanup = null;
         currentLoadRef.current.url = null;
       }
@@ -917,7 +932,7 @@ export default function AudioPlayer() {
     ) {
       try {
         await window.electronAPI.unwatchFolder();
-      } catch (e) {}
+      } catch (e) { }
     }
     hasFolderWatchRef.current = false;
     const hadFiles = Array.isArray(files) && files.length > 0;
@@ -992,10 +1007,10 @@ export default function AudioPlayer() {
       if (wsRef.current) {
         try {
           wsRef.current.pause && wsRef.current.pause();
-        } catch (e) {}
+        } catch (e) { }
         try {
           wsRef.current.destroy();
-        } catch (e) {}
+        } catch (e) { }
         wsRef.current = null;
       }
 
@@ -1005,7 +1020,7 @@ export default function AudioPlayer() {
       ) {
         try {
           currentLoadRef.current.cleanup();
-        } catch (e) {}
+        } catch (e) { }
         currentLoadRef.current.cleanup = null;
         currentLoadRef.current.url = null;
       }
@@ -1045,7 +1060,7 @@ export default function AudioPlayer() {
     ) {
       try {
         currentLoadRef.current.cleanup();
-      } catch (e) {}
+      } catch (e) { }
       currentLoadRef.current.cleanup = null;
       currentLoadRef.current.url = null;
     }
@@ -1053,10 +1068,10 @@ export default function AudioPlayer() {
     if (wsRef.current) {
       try {
         wsRef.current.pause && wsRef.current.pause();
-      } catch (e) {}
+      } catch (e) { }
       try {
         wsRef.current.empty && wsRef.current.empty();
-      } catch (e) {}
+      } catch (e) { }
     } else {
       createWaveSurfer();
     }
@@ -1097,16 +1112,16 @@ export default function AudioPlayer() {
           try {
             if (wsNow.seekTo) wsNow.seekTo(0);
             else if (wsNow.setCurrentTime) wsNow.setCurrentTime(0);
-          } catch (e) {}
+          } catch (e) { }
           setTime(0);
           if (currentLoadRef.current && currentLoadRef.current.url) {
             try {
               URL.revokeObjectURL(currentLoadRef.current.url);
-            } catch (e) {}
+            } catch (e) { }
             currentLoadRef.current.url = null;
           }
           setIsLoaded(true);
-          
+
           // apply saved playback settings
           const storeState = usePlayerStore.getState();
           try {
@@ -1114,23 +1129,23 @@ export default function AudioPlayer() {
             if (wsNow.setPlaybackRate && storeState.playbackSpeed) {
               wsNow.setPlaybackRate(storeState.playbackSpeed);
             }
-            
+
             const mediaElement = wsNow.getMediaElement?.();
             if (mediaElement) {
               // apply pitch preservation setting
               const shouldPreservePitch = storeState.preservePitch;
               mediaElement.preservesPitch = shouldPreservePitch;
-          
-              
+
+
               // apply audio output device
               if (storeState.audioOutputDevice && typeof mediaElement.setSinkId === "function") {
-                mediaElement.setSinkId(storeState.audioOutputDevice).catch(() => {});
+                mediaElement.setSinkId(storeState.audioOutputDevice).catch(() => { });
               }
             } else if (storeState.audioOutputDevice && typeof wsNow.setSinkId === "function") {
-              wsNow.setSinkId(storeState.audioOutputDevice).catch(() => {});
+              wsNow.setSinkId(storeState.audioOutputDevice).catch(() => { });
             }
-          } catch (e) {}
-          
+          } catch (e) { }
+
           if (autoPlay && wsNow && typeof wsNow.play === "function") {
             try {
               wsNow.play();
@@ -1153,11 +1168,11 @@ export default function AudioPlayer() {
                 ? wsRef.current.un("ready", handleReady)
                 : wsRef.current.off && wsRef.current.off("ready", handleReady);
             }
-          } catch (e) {}
+          } catch (e) { }
           if (currentLoadRef.current && currentLoadRef.current.url) {
             try {
               URL.revokeObjectURL(currentLoadRef.current.url);
-            } catch (e) {}
+            } catch (e) { }
             currentLoadRef.current.url = null;
           }
           try {
@@ -1167,7 +1182,7 @@ export default function AudioPlayer() {
             ) {
               currentLoadRef.current.errorCleanup();
             }
-          } catch (e) {}
+          } catch (e) { }
           if (currentLoadRef.current) {
             currentLoadRef.current.errorCleanup = null;
           }
@@ -1179,7 +1194,7 @@ export default function AudioPlayer() {
         const handleError = (err) => {
           try {
             onError && onError(err);
-          } catch (e) {}
+          } catch (e) { }
         };
         currentLoadRef.current.errorCleanup = () => {
           try {
@@ -1188,7 +1203,7 @@ export default function AudioPlayer() {
                 ? wsRef.current.un("error", handleError)
                 : wsRef.current.off && wsRef.current.off("error", handleError);
             }
-          } catch (e) {}
+          } catch (e) { }
         };
         wsRef.current.once && wsRef.current.once("error", handleError);
       };
@@ -1253,8 +1268,7 @@ export default function AudioPlayer() {
           return true;
         } catch (e) {
           console.error(
-            `WaveSurfer load error (${
-              isFallback ? "fallback attempt" : "initial attempt"
+            `WaveSurfer load error (${isFallback ? "fallback attempt" : "initial attempt"
             }), will try fallback:`,
             e
           );
@@ -1342,7 +1356,10 @@ export default function AudioPlayer() {
 
   useEffect(() => {
     hopFnRef.current = hop;
-  }, [hop]);
+    togglePlayFnRef.current = togglePlay;
+    nextFnRef.current = next;
+    prevFnRef.current = prev;
+  }, [hop, togglePlay, next, prev]);
 
   useEffect(() => {
     function onKey(e) {
@@ -1355,19 +1372,19 @@ export default function AudioPlayer() {
         return;
       if (e.key === "ArrowLeft") {
         e.preventDefault();
-        hop(-1); // was -1.5
+        hopFnRef.current(-1);
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
-        hop(1); // was 1.5
+        hopFnRef.current(1);
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        prev();
+        prevFnRef.current();
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
-        next();
+        nextFnRef.current();
       } else if (e.code === "Space") {
         e.preventDefault();
-        togglePlay();
+        togglePlayFnRef.current();
       }
     }
     window.addEventListener("keydown", onKey);
@@ -1452,7 +1469,7 @@ export default function AudioPlayer() {
           const currentState = usePlayerStore.getState();
           const base =
             currentState.fileMetadata &&
-            typeof currentState.fileMetadata === "object"
+              typeof currentState.fileMetadata === "object"
               ? currentState.fileMetadata
               : {};
           const next = { ...base };
@@ -1462,7 +1479,7 @@ export default function AudioPlayer() {
             }
           });
           currentState.setFileMetadata(next);
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       if (
@@ -1486,7 +1503,7 @@ export default function AudioPlayer() {
           });
           durationsRef.current = map;
           usePlayerStore.getState().setDurations({ ...map });
-        }).catch(() => {});
+        }).catch(() => { });
       }
     });
 
@@ -1494,7 +1511,7 @@ export default function AudioPlayer() {
       if (typeof unsubscribe === "function") {
         try {
           unsubscribe();
-        } catch (e) {}
+        } catch (e) { }
       }
     };
   }, [currentFolderPath]);
@@ -1509,7 +1526,7 @@ export default function AudioPlayer() {
     if (!filePath) {
       try {
         ms.metadata = null;
-      } catch (e) {}
+      } catch (e) { }
       return;
     }
 
@@ -1522,7 +1539,7 @@ export default function AudioPlayer() {
       ms.metadata = new MediaMetadata({
         title: name,
       });
-    } catch (e) {}
+    } catch (e) { }
   }, [files, currentIndex]);
 
   useEffect(() => {
@@ -1539,19 +1556,19 @@ export default function AudioPlayer() {
         ) {
           try {
             window.electronAPI.updatePlaybackState(false);
-          } catch (e) {}
+          } catch (e) { }
         }
         return;
       }
       ms.playbackState = isPlaying ? "playing" : "paused";
-    } catch (e) {}
+    } catch (e) { }
     if (
       window.electronAPI &&
       typeof window.electronAPI.updatePlaybackState === "function"
     ) {
       try {
         window.electronAPI.updatePlaybackState(!!(isLoaded && isPlaying));
-      } catch (e) {}
+      } catch (e) { }
     }
   }, [isLoaded, isPlaying]);
 
@@ -1571,7 +1588,7 @@ export default function AudioPlayer() {
         duration: safeDuration,
         position: pos,
       });
-    } catch (e) {}
+    } catch (e) { }
   }, [time, duration, isLoaded]);
 
   useEffect(() => {
@@ -1609,7 +1626,7 @@ export default function AudioPlayer() {
           wsRef.current.seekTo(nt / dur);
         }
       });
-    } catch (e) {}
+    } catch (e) { }
 
     return () => {
       try {
@@ -1619,7 +1636,7 @@ export default function AudioPlayer() {
         ms.setActionHandler("nexttrack", null);
         ms.setActionHandler("previoustrack", null);
         ms.setActionHandler("seekto", null);
-      } catch (e) {}
+      } catch (e) { }
     };
   }, [files, currentIndex, isLoaded, duration]);
 
@@ -1628,15 +1645,15 @@ export default function AudioPlayer() {
     const base = Array.isArray(baseOverride)
       ? baseOverride
       : Array.isArray(files)
-      ? files
-      : [];
+        ? files
+        : [];
     const pairs = base.map((f, idx) => ({ f, idx }));
     const q = (state.searchQuery || "").toLowerCase().trim();
     const filtered = q
       ? pairs.filter((p) => {
-          const displayName = (getDisplayName(p.f) || "").toLowerCase();
-          return displayName.includes(q);
-        })
+        const displayName = (getDisplayName(p.f) || "").toLowerCase();
+        return displayName.includes(q);
+      })
       : pairs;
 
     const mode = state.sortMode;
@@ -1673,15 +1690,15 @@ export default function AudioPlayer() {
             (typeof ma.mtimeMs === "number"
               ? ma.mtimeMs
               : ma.mtimeIso
-              ? Date.parse(ma.mtimeIso)
-              : 0);
+                ? Date.parse(ma.mtimeIso)
+                : 0);
           const tb =
             mb &&
             (typeof mb.mtimeMs === "number"
               ? mb.mtimeMs
               : mb.mtimeIso
-              ? Date.parse(mb.mtimeIso)
-              : 0);
+                ? Date.parse(mb.mtimeIso)
+                : 0);
           if (ta !== tb) {
             return mode === "date"
               ? (tb || 0) - (ta || 0)
@@ -1975,7 +1992,7 @@ export default function AudioPlayer() {
       if (wsRef.current) {
         try {
           wsRef.current.pause && wsRef.current.pause();
-        } catch (e) {}
+        } catch (e) { }
         wsRef.current.empty && wsRef.current.empty();
       }
       isPlayingRef.current = false;
@@ -1987,7 +2004,7 @@ export default function AudioPlayer() {
       ) {
         try {
           currentLoadRef.current.cleanup();
-        } catch (e) {}
+        } catch (e) { }
         currentLoadRef.current.cleanup = null;
         currentLoadRef.current.url = null;
       }

@@ -43,6 +43,12 @@ export default function Settings({ isOpen, onClose }) {
   );
   const preservePitch = usePlayerStore((state) => state.preservePitch);
   const setPreservePitch = usePlayerStore((state) => state.setPreservePitch);
+  const playOnSeekWhenPaused = usePlayerStore(
+    (state) => state.playOnSeekWhenPaused
+  );
+  const setPlayOnSeekWhenPaused = usePlayerStore(
+    (state) => state.setPlayOnSeekWhenPaused
+  );
   const [audioDevices, setAudioDevices] = useState([]);
   const [activeTab, setActiveTab] = useState("general");
   const [rememberLastFolder, setRememberLastFolder] = useState(false);
@@ -169,7 +175,7 @@ export default function Settings({ isOpen, onClose }) {
         aria-modal="true"
         aria-labelledby="settings-title"
       >
-        {}
+        { }
         <div className="flex items-center justify-between p-24 border-b-2 border-white">
           <h2 id="settings-title" className="text-xl font-bold text-white">
             Settings
@@ -183,55 +189,51 @@ export default function Settings({ isOpen, onClose }) {
           </button>
         </div>
 
-        {}
+        { }
         <div className="flex border-b-2 border-white">
           <button
             onClick={() => setActiveTab("general")}
-            className={`flex items-center gap-8 px-16 py-8 text-white transition-all duration-200 border-r-2 border-white ${
-              activeTab === "general"
+            className={`flex items-center gap-8 px-16 py-8 text-white transition-all duration-200 border-r-2 border-white ${activeTab === "general"
                 ? "bg-[var(--accent-color)]"
                 : "bg-pure-black hover:bg-white/10"
-            }`}
+              }`}
           >
             <Settings2 size={16} strokeWidth={2} />
             <span>General</span>
           </button>
           <button
             onClick={() => setActiveTab("appearance")}
-            className={`flex items-center gap-8 px-16 py-8 text-white transition-all duration-200 border-r-2 border-white ${
-              activeTab === "appearance"
+            className={`flex items-center gap-8 px-16 py-8 text-white transition-all duration-200 border-r-2 border-white ${activeTab === "appearance"
                 ? "bg-[var(--accent-color)]"
                 : "bg-pure-black hover:bg-white/10"
-            }`}
+              }`}
           >
             <Palette size={16} strokeWidth={2} />
             <span>Appearance</span>
           </button>
           <button
             onClick={() => setActiveTab("audio")}
-            className={`flex items-center gap-8 px-16 py-8 text-white transition-all duration-200 border-r-2 border-white ${
-              activeTab === "audio"
+            className={`flex items-center gap-8 px-16 py-8 text-white transition-all duration-200 border-r-2 border-white ${activeTab === "audio"
                 ? "bg-[var(--accent-color)]"
                 : "bg-pure-black hover:bg-white/10"
-            }`}
+              }`}
           >
             <Volume2 size={16} strokeWidth={2} />
             <span>Audio</span>
           </button>
           <button
             onClick={() => setActiveTab("about")}
-            className={`flex items-center gap-8 px-16 py-8 text-white transition-all duration-200 ${
-              activeTab === "about"
+            className={`flex items-center gap-8 px-16 py-8 text-white transition-all duration-200 ${activeTab === "about"
                 ? "bg-[var(--accent-color)]"
                 : "bg-pure-black hover:bg-white/10"
-            }`}
+              }`}
           >
             <Info size={16} strokeWidth={2} />
             <span>About</span>
           </button>
         </div>
 
-        {}
+        { }
         <div className="flex-1 p-24 overflow-y-auto">
           {activeTab === "general" && (
             <div className="space-y-24">
@@ -251,11 +253,10 @@ export default function Settings({ isOpen, onClose }) {
                       className="sr-only"
                     />
                     <div
-                      className={`size-6 border-2 transition-all duration-200 ${
-                        rememberLastFolder
+                      className={`size-6 border-2 transition-all duration-200 ${rememberLastFolder
                           ? "bg-[var(--accent-color)] border-[var(--accent-color)]"
                           : "bg-pure-black border-white/40 group-hover:border-white"
-                      }`}
+                        }`}
                     >
                       {rememberLastFolder && (
                         <Check size={20} strokeWidth={2} />
@@ -284,11 +285,10 @@ export default function Settings({ isOpen, onClose }) {
                         className="sr-only"
                       />
                       <div
-                        className={`size-6 border-2 transition-all duration-200 ${
-                          rememberLastSortMode
+                        className={`size-6 border-2 transition-all duration-200 ${rememberLastSortMode
                             ? "bg-[var(--accent-color)] border-[var(--accent-color)]"
                             : "bg-pure-black border-white/40 group-hover:border-white"
-                        }`}
+                          }`}
                       >
                         {rememberLastSortMode && (
                           <Check size={20} strokeWidth={2} />
@@ -313,11 +313,10 @@ export default function Settings({ isOpen, onClose }) {
                         <button
                           type="button"
                           onClick={() => handleSortModeScopeChange("global")}
-                          className={`flex flex-row px-2 py-8 gap-2 border-2 text-xs lowercase transition-all duration-200 ${
-                            sortModeScope === "global"
+                          className={`flex flex-row px-2 py-8 gap-2 border-2 text-xs lowercase transition-all duration-200 ${sortModeScope === "global"
                               ? "bg-[var(--accent-color)] border-[var(--accent-color)] text-white"
                               : "bg-pure-black border-white/40 text-white hover:border-white"
-                          }`}
+                            }`}
                         >
                           {sortModeScope === "global" && (
                             <Check size={16} strokeWidth={2} />
@@ -328,11 +327,10 @@ export default function Settings({ isOpen, onClose }) {
                         <button
                           type="button"
                           onClick={() => handleSortModeScopeChange("perFolder")}
-                          className={`flex flex-row px-2 py-8 gap-2 border-2 text-xs lowercase transition-all duration-200 ${
-                            sortModeScope === "perFolder"
+                          className={`flex flex-row px-2 py-8 gap-2 border-2 text-xs lowercase transition-all duration-200 ${sortModeScope === "perFolder"
                               ? "bg-[var(--accent-color)] border-[var(--accent-color)] text-white"
                               : "bg-pure-black border-white/40 text-white hover:border-white"
-                          }`}
+                            }`}
                         >
                           {sortModeScope === "perFolder" && (
                             <Check size={16} strokeWidth={2} />
@@ -390,11 +388,10 @@ export default function Settings({ isOpen, onClose }) {
                         className="sr-only"
                       />
                       <div
-                        className={`size-6 border-2 transition-all duration-200 ${
-                          preservePitch
+                        className={`size-6 border-2 transition-all duration-200 ${preservePitch
                             ? "bg-[var(--accent-color)] border-[var(--accent-color)]"
                             : "bg-pure-black border-white/40 group-hover:border-white"
-                        }`}
+                          }`}
                       >
                         {preservePitch && (
                           <Check size={20} strokeWidth={2} />
@@ -409,6 +406,35 @@ export default function Settings({ isOpen, onClose }) {
                     When enabled, changing playback speed will not affect the pitch of the audio.
                   </p>
                 </div>
+
+                <div className="mt-24">
+                  <label className="flex items-center gap-5 cursor-pointer group">
+                    <div className="relative">
+                      <input
+                        type="checkbox"
+                        checked={playOnSeekWhenPaused}
+                        onChange={(e) => setPlayOnSeekWhenPaused(e.target.checked)}
+                        className="sr-only"
+                      />
+                      <div
+                        className={`size-6 border-2 transition-all duration-200 ${playOnSeekWhenPaused
+                            ? "bg-[var(--accent-color)] border-[var(--accent-color)]"
+                            : "bg-pure-black border-white/40 group-hover:border-white"
+                          }`}
+                      >
+                        {playOnSeekWhenPaused && (
+                          <Check size={20} strokeWidth={2} />
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-white">
+                      Play on seek when paused
+                    </span>
+                  </label>
+                  <p className="mt-[1rem] text-sm text-white/40">
+                    When enabled, seeking on the waveform while paused will automatically resume playback.
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -420,17 +446,16 @@ export default function Settings({ isOpen, onClose }) {
                   Accent Color
                 </h3>
 
-                {}
+                { }
                 <div className="grid grid-cols-4 gap-8 mb-24">
                   {PRESET_COLORS.map((preset) => (
                     <button
                       key={preset.value}
                       onClick={() => handleColorChange(preset.value)}
-                      className={`aspect-[2/1] border-2 transition-all duration-200 flex items-center justify-center ${
-                        accentColor === preset.value
+                      className={`aspect-[2/1] border-2 transition-all duration-200 flex items-center justify-center ${accentColor === preset.value
                           ? "border-white"
                           : "border-white/20 hover:border-white"
-                      }`}
+                        }`}
                       style={{ backgroundColor: preset.value }}
                       title={preset.name}
                     >
@@ -441,7 +466,7 @@ export default function Settings({ isOpen, onClose }) {
                   ))}
                 </div>
 
-                {}
+                { }
                 <div className="flex items-center gap-16">
                   <label className="text-white font-medium">
                     Custom Color:
@@ -489,11 +514,10 @@ export default function Settings({ isOpen, onClose }) {
                                 setWavesurferTheme(option.value);
                                 setIsThemeMenuOpen(false);
                               }}
-                              className={`w-full flex items-center justify-between px-2 py-2 text-xs no-drag transition-colors ${
-                                isActive
+                              className={`w-full flex items-center justify-between px-2 py-2 text-xs no-drag transition-colors ${isActive
                                   ? "bg-[var(--accent-color)] text-white"
                                   : "bg-pure-black text-white hover:bg-white hover:text-pure-black"
-                              }`}
+                                }`}
                             >
                               <span>{option.label}</span>
                             </button>
@@ -519,11 +543,10 @@ export default function Settings({ isOpen, onClose }) {
                       className="sr-only"
                     />
                     <div
-                      className={`size-6 border-2 transition-all duration-200 ${
-                        wavesurferShowHover
+                      className={`size-6 border-2 transition-all duration-200 ${wavesurferShowHover
                           ? "bg-[var(--accent-color)] border-[var(--accent-color)]"
                           : "bg-pure-black border-white/40 group-hover:border-white"
-                      }`}
+                        }`}
                     >
                       {wavesurferShowHover && (
                         <Check size={20} strokeWidth={2} />
@@ -531,15 +554,15 @@ export default function Settings({ isOpen, onClose }) {
                     </div>
                   </div>
                   <span className="text-white">Show cursor with time</span>
-                  
+
                 </label>
               </div>
               <p className="mt-8 text-sm text-white/40">
-                  When enabled, you will see a visible seek head with a flag on the upper-right corner indicating the time at the position of the seek head when you move your cursor on the track view.
-                </p>
-                <p className="mt-8 text-sm text-white/40">
-                  Changing this will briefly pause playback.
-                </p>
+                When enabled, you will see a visible seek head with a flag on the upper-right corner indicating the time at the position of the seek head when you move your cursor on the track view.
+              </p>
+              <p className="mt-8 text-sm text-white/40">
+                Changing this will briefly pause playback.
+              </p>
 
             </div>
           )}
@@ -577,11 +600,10 @@ export default function Settings({ isOpen, onClose }) {
                                 handleDeviceChange(device.deviceId);
                                 setIsDeviceMenuOpen(false);
                               }}
-                              className={`w-full flex items-center justify-between px-2 py-2 text-xs no-drag transition-colors ${
-                                isActive
+                              className={`w-full flex items-center justify-between px-2 py-2 text-xs no-drag transition-colors ${isActive
                                   ? "bg-[var(--accent-color)] text-white"
                                   : "bg-pure-black text-white hover:bg-white hover:text-pure-black"
-                              }`}
+                                }`}
                             >
                               <span className="truncate">{device.label || `audio output ${idx + 1}`}</span>
                             </button>
@@ -638,7 +660,7 @@ export default function Settings({ isOpen, onClose }) {
           )}
         </div>
 
-        {}
+        { }
       </div>
     </div>
   );

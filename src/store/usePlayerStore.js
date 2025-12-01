@@ -10,7 +10,7 @@ try {
       initialAccentColor = saved;
     }
   }
-} catch (e) {}
+} catch (e) { }
 
 try {
   if (typeof document !== "undefined") {
@@ -19,7 +19,7 @@ try {
       initialAccentColor
     );
   }
-} catch (e) {}
+} catch (e) { }
 
 let initialNudgeAmount = 1.5;
 try {
@@ -29,7 +29,7 @@ try {
       initialNudgeAmount = savedNudge;
     }
   }
-} catch (e) {}
+} catch (e) { }
 
 // playback speed always resets to 1x on startup (not persisted)
 const initialPlaybackSpeed = 1;
@@ -49,7 +49,7 @@ try {
       initialWavesurferTheme = "classic";
     }
   }
-} catch (e) {}
+} catch (e) { }
 
 let initialWavesurferShowHover = true;
 try {
@@ -59,7 +59,7 @@ try {
       initialWavesurferShowHover = savedHover === "true";
     }
   }
-} catch (e) {}
+} catch (e) { }
 
 let initialAudioOutputDevice = "";
 try {
@@ -69,7 +69,7 @@ try {
       initialAudioOutputDevice = savedDevice;
     }
   }
-} catch (e) {}
+} catch (e) { }
 
 let initialPreservePitch = true;
 try {
@@ -79,7 +79,17 @@ try {
       initialPreservePitch = savedPreservePitch === "true";
     }
   }
-} catch (e) {}
+} catch (e) { }
+
+let initialPlayOnSeekWhenPaused = false;
+try {
+  if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+    const savedPlayOnSeek = localStorage.getItem("playOnSeekWhenPaused");
+    if (savedPlayOnSeek !== null) {
+      initialPlayOnSeekWhenPaused = savedPlayOnSeek === "false";
+    }
+  }
+} catch (e) { }
 
 const usePlayerStore = create((set, get) => ({
   // core playback / selection
@@ -99,6 +109,7 @@ const usePlayerStore = create((set, get) => ({
   wavesurferShowHover: initialWavesurferShowHover,
   audioOutputDevice: initialAudioOutputDevice,
   preservePitch: initialPreservePitch,
+  playOnSeekWhenPaused: initialPlayOnSeekWhenPaused,
 
   // folder / playlist context
   folderTree: null,
@@ -143,7 +154,7 @@ const usePlayerStore = create((set, get) => ({
         if (typeof localStorage !== "undefined") {
           localStorage.setItem("nudgeAmount", rangeClamped.toString());
         }
-      } catch (e) {}
+      } catch (e) { }
       return { nudgeAmount: rangeClamped };
     }),
   setPlaybackSpeed: (speed) =>
@@ -162,7 +173,7 @@ const usePlayerStore = create((set, get) => ({
       if (typeof localStorage !== "undefined") {
         localStorage.setItem("wavesurferTheme", theme);
       }
-    } catch (e) {}
+    } catch (e) { }
   },
   setWavesurferShowHover: (show) => {
     const val = Boolean(show);
@@ -171,7 +182,7 @@ const usePlayerStore = create((set, get) => ({
       if (typeof localStorage !== "undefined") {
         localStorage.setItem("wavesurferShowHover", val.toString());
       }
-    } catch (e) {}
+    } catch (e) { }
   },
   setAudioOutputDevice: (deviceId) => {
     set({ audioOutputDevice: deviceId || "" });
@@ -179,7 +190,7 @@ const usePlayerStore = create((set, get) => ({
       if (typeof localStorage !== "undefined") {
         localStorage.setItem("audioOutputDevice", deviceId || "");
       }
-    } catch (e) {}
+    } catch (e) { }
   },
   setPreservePitch: (preserve) => {
     const val = Boolean(preserve);
@@ -188,7 +199,16 @@ const usePlayerStore = create((set, get) => ({
       if (typeof localStorage !== "undefined") {
         localStorage.setItem("preservePitch", val.toString());
       }
-    } catch (e) {}
+    } catch (e) { }
+  },
+  setPlayOnSeekWhenPaused: (enabled) => {
+    const val = Boolean(enabled);
+    set({ playOnSeekWhenPaused: val });
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem("playOnSeekWhenPaused", val.toString());
+      }
+    } catch (e) { }
   },
   setFolderTree: (folderTree) => set({ folderTree }),
   setDurations: (durations) => set({ durations }),
@@ -208,7 +228,7 @@ const usePlayerStore = create((set, get) => ({
       if (typeof localStorage !== "undefined") {
         localStorage.setItem("accentColor", color);
       }
-    } catch (e) {}
+    } catch (e) { }
   },
 
   openSettings: () => set({ isSettingsOpen: true }),
@@ -233,7 +253,7 @@ const usePlayerStore = create((set, get) => ({
       if (savedSort) {
         set({ sortMode: savedSort });
       }
-    } catch (e) {}
+    } catch (e) { }
   },
 
   setSortMode: (sortMode) => {
@@ -250,7 +270,7 @@ const usePlayerStore = create((set, get) => ({
       } else {
         localStorage.setItem("lastSortMode", sortMode);
       }
-    } catch (e) {}
+    } catch (e) { }
   },
 
   // toast helpers managed in store (so component can stay stateless for this)
