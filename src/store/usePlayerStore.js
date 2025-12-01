@@ -86,7 +86,7 @@ try {
   if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
     const savedPlayOnSeek = localStorage.getItem("playOnSeekWhenPaused");
     if (savedPlayOnSeek !== null) {
-      initialPlayOnSeekWhenPaused = savedPlayOnSeek === "false";
+      initialPlayOnSeekWhenPaused = savedPlayOnSeek;
     }
   }
 } catch (e) { }
