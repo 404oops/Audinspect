@@ -21,14 +21,11 @@ jobs:
 
     strategy:
       matrix:
-        # macos-13 is the only intel-based image for github, so we will be using that
         os:
           [
-            macos-15-intel,
             macos-latest,
             ubuntu-latest,
             windows-latest,
-            windows-11-arm,
           ]
 
     steps:
