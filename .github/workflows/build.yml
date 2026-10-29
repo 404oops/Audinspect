@@ -13,6 +13,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      PUTER_AUTH_TOKEN: ${{ secrets.PUTER_AUTH_TOKEN }}
+      PUTER_SUBDOMAIN: ${{ secrets.PUTER_SUBDOMAIN }}
 
     steps:
       - name: Check out Git repository
@@ -40,8 +43,7 @@ jobs:
       # publishes dist/ to <PUTER_SUBDOMAIN>.puter.site when the secrets are
       # set (PUTER_AUTH_TOKEN from `puter login`, PUTER_SUBDOMAIN of your choice)
       - name: Deploy to Puter
-        if: github.event_name == 'push' && secrets.PUTER_AUTH_TOKEN != ''
+        if: github.event_name == 'push' && env.PUTER_AUTH_TOKEN != '' && env.PUTER_SUBDOMAIN != ''
         env:
           CI: "true"
-          PUTER_AUTH_TOKEN: ${{ secrets.PUTER_AUTH_TOKEN }}
-        run: npx puter site deploy dist "${{ secrets.PUTER_SUBDOMAIN }}"
+        run: npx puter site deploy dist "$PUTER_SUBDOMAIN"
