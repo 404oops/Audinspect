@@ -13,9 +13,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      PUTER_AUTH_TOKEN: ${{ secrets.PUTER_AUTH_TOKEN }}
-      PUTER_SUBDOMAIN: ${{ secrets.PUTER_SUBDOMAIN }}
 
     steps:
       - name: Check out Git repository
@@ -40,14 +37,23 @@ jobs:
           path: dist/
           if-no-files-found: error
 
-      # uploads dist/ to ~/Documents/Audinspect on the puter drive, serves it
-      # at <PUTER_SUBDOMAIN>.puter.site and creates/updates the puter app.
-      # needs the PUTER_AUTH_TOKEN and PUTER_SUBDOMAIN repository secrets;
-      # PUTER_APP_NAME / PUTER_APP_DIR are optional overrides.
+      # `secrets` can't be read in an `if`, so a step turns their presence
+      # into an output; the token itself is only exposed to the deploy step
+      - name: Check deploy secrets
+        id: check
+        run: echo "deploy=${{ github.event_name == 'push' && secrets.PUTER_AUTH_TOKEN != '' && secrets.PUTER_SUBDOMAIN != '' }}" >> "$GITHUB_OUTPUT"
+
+      # uploads dist/ to a release folder under ~/Documents/Audinspect on the
+      # puter drive, serves it at <PUTER_SUBDOMAIN>.puter.site and
+      # creates/updates the puter app. needs the PUTER_AUTH_TOKEN and
+      # PUTER_SUBDOMAIN repository secrets; PUTER_APP_NAME / PUTER_APP_DIR
+      # are optional repository variables.
       - name: Deploy to Puter
-        if: github.event_name == 'push' && env.PUTER_AUTH_TOKEN != '' && env.PUTER_SUBDOMAIN != ''
+        if: steps.check.outputs.deploy == 'true'
         env:
           CI: "true"
+          PUTER_AUTH_TOKEN: ${{ secrets.PUTER_AUTH_TOKEN }}
+          PUTER_SUBDOMAIN: ${{ secrets.PUTER_SUBDOMAIN }}
           PUTER_APP_NAME: ${{ vars.PUTER_APP_NAME }}
           PUTER_APP_DIR: ${{ vars.PUTER_APP_DIR }}
         run: node scripts/deploy-puter.mjs
