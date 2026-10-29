@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 
 const iconButtonClass =
-  "bg-pure-black border-2 border-white hover:bg-[var(--accent-color)] hover:border-[var(--accent-color)] text-white p-8 transition-colors duration-200 no-drag";
+  "bg-pure-black border-2 border-white hover:bg-[var(--accent-color)] hover:border-[var(--accent-color)] text-white p-8 transition-colors duration-200";
 
 function formatNudge(nudgeAmount) {
   if (typeof nudgeAmount !== "number") return "0";

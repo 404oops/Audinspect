@@ -2,8 +2,9 @@ import { useState } from "react";
 import { Check } from "lucide-react";
 import usePlayerStore from "../../store/usePlayerStore";
 import CheckboxRow from "./CheckboxRow";
+import { settingsStorage } from "../../platform/settingsStorage";
 
-const readFlag = (key) => localStorage.getItem(key) === "true";
+const readFlag = (key) => settingsStorage.getItem(key) === "true";
 
 function SortScopeButton({ scope, current, onSelect, children }) {
   const isActive = current === scope;
@@ -30,26 +31,26 @@ function StartupSection() {
     readFlag("rememberLastSortMode")
   );
   const [sortModeScope, setSortModeScope] = useState(() =>
-    localStorage.getItem("sortModeScope") === "perFolder" ? "perFolder" : "global"
+    settingsStorage.getItem("sortModeScope") === "perFolder" ? "perFolder" : "global"
   );
 
   const handleRememberLastFolderChange = (enabled) => {
     setRememberLastFolder(enabled);
-    localStorage.setItem("rememberLastFolder", enabled ? "true" : "false");
+    settingsStorage.setItem("rememberLastFolder", enabled ? "true" : "false");
     if (!enabled) {
-      localStorage.removeItem("lastOpenedFolder");
+      settingsStorage.removeItem("lastOpenedFolder");
     }
   };
 
   const handleRememberLastSortModeChange = (enabled) => {
     setRememberLastSortMode(enabled);
-    localStorage.setItem("rememberLastSortMode", enabled ? "true" : "false");
+    settingsStorage.setItem("rememberLastSortMode", enabled ? "true" : "false");
   };
 
   const handleSortModeScopeChange = (scope) => {
     if (scope !== "global" && scope !== "perFolder") return;
     setSortModeScope(scope);
-    localStorage.setItem("sortModeScope", scope);
+    settingsStorage.setItem("sortModeScope", scope);
   };
 
   return (

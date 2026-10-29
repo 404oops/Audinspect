@@ -80,12 +80,12 @@ export default function PlayerArea({
           <div className="flex items-center gap-4 sm:gap-6 md:gap-8 justify-end">
             <div
               ref={timeDisplayRef}
-              className="text-sm font-mono text-white no-drag"
+              className="text-sm font-mono text-white"
             >
               {formatTime(time)}
             </div>
-            <div className="text-xs text-white/40 no-drag">/</div>
-            <div className="text-sm font-mono text-white/60 no-drag">
+            <div className="text-xs text-white/40">/</div>
+            <div className="text-sm font-mono text-white/60">
               {formatTime(duration)}
             </div>
             <SpeedSelector />

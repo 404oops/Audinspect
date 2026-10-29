@@ -23,10 +23,9 @@ function AccentColorSection() {
   const accentColor = usePlayerStore((state) => state.accentColor);
   const setAccentColor = usePlayerStore((state) => state.setAccentColor);
 
+  // the store applies the css variable and persists the choice
   const handleColorChange = (color) => {
     setAccentColor(color);
-    document.documentElement.style.setProperty("--accent-color", color);
-    localStorage.setItem("accentColor", color);
   };
 
   const handleCustomColorChange = (e) => {
@@ -109,7 +108,7 @@ function WaveformSection() {
             onChange={setWavesurferTheme}
             fallbackLabel="Default (filled)"
             labelledBy="waveform-theme-label"
-            buttonClassName="bg-pure-black text-white border-2 border-white text-xs w-[190px] px-8 py-[0.5rem] no-drag focus:outline-none focus:border-[var(--accent-color)] transition-colors text-left flex items-center justify-between"
+            buttonClassName="bg-pure-black text-white border-2 border-white text-xs w-[190px] px-8 py-[0.5rem] focus:outline-none focus:border-[var(--accent-color)] transition-colors text-left flex items-center justify-between"
             menuClassName="absolute left-0 mt-2 w-[190px] bg-pure-black border-2 border-white shadow-lg z-50"
           />
         </div>

@@ -1,32 +1,18 @@
-name: Build/Release
+name: Build/Deploy
 
 on:
   push:
     branches:
-      - main
-      - master
+      - puter
     tags:
       - "v*"
   pull_request:
     branches:
-      - main
-      - master
-
-permissions:
-  contents: write
+      - puter
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      matrix:
-        os:
-          [
-            macos-latest,
-            ubuntu-latest,
-            windows-latest,
-          ]
+    runs-on: ubuntu-latest
 
     steps:
       - name: Check out Git repository
@@ -41,38 +27,21 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
-      - name: Build Electron App
-        run: npm run package
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build
+        run: npm run build
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os }}-build
-          path: build/
+          name: audinspect-puter
+          path: dist/
           if-no-files-found: error
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-
-    steps:
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Display structure of downloaded files
-        run: ls -R artifacts
-
-      - name: Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: artifacts/**/*
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+      # publishes dist/ to <PUTER_SUBDOMAIN>.puter.site when the secrets are
+      # set (PUTER_AUTH_TOKEN from `puter login`, PUTER_SUBDOMAIN of your choice)
+      - name: Deploy to Puter
+        if: github.event_name == 'push' && secrets.PUTER_AUTH_TOKEN != ''
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI: "true"
+          PUTER_AUTH_TOKEN: ${{ secrets.PUTER_AUTH_TOKEN }}
+        run: npx puter site deploy dist "${{ secrets.PUTER_SUBDOMAIN }}"

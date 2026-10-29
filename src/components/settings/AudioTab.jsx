@@ -1,18 +1,15 @@
-import { useState, useEffect } from "react";
-import { RefreshCw, Download, FolderSearch, Trash } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Trash, RefreshCw } from "lucide-react";
 import usePlayerStore from "../../store/usePlayerStore";
 import Dropdown from "./Dropdown";
-import BinaryRow from "./BinaryRow";
-import useAudioEngine from "./useAudioEngine";
-
-const formatMB = (bytes) => `${((bytes || 0) / 1024 / 1024).toFixed(1)} MB`;
+import { describeDecoderSupport, ENGINE_LABELS } from "../../audio/decoderSupport";
+import {
+  getMetadataCacheStats,
+  clearMetadataCache,
+} from "../../utils/metadataClient";
 
 const ACTION_BUTTON =
-  "flex items-center gap-4 bg-pure-black border-2 border-white hover:bg-white hover:text-pure-black text-white text-xs px-8 py-[0.5rem] no-drag disabled:opacity-50";
-const QUIET_BUTTON =
-  "flex items-center gap-4 bg-pure-black border-2 border-white/40 hover:border-white text-white text-xs px-8 py-[0.5rem] no-drag disabled:opacity-50";
-const ACCENT_BUTTON =
-  "flex items-center gap-4 bg-[var(--accent-color)] border-2 border-[var(--accent-color)] hover:bg-white hover:text-[var(--accent-color)] text-white text-xs px-8 py-[0.5rem] no-drag disabled:opacity-50";
+  "flex items-center gap-4 bg-pure-black border-2 border-white hover:bg-white hover:text-pure-black text-white text-xs px-8 py-[0.5rem] disabled:opacity-50";
 
 function OutputDeviceSection() {
   const audioOutputDevice = usePlayerStore((state) => state.audioOutputDevice);
@@ -23,6 +20,7 @@ function OutputDeviceSection() {
 
   useEffect(() => {
     let active = true;
+    if (!navigator.mediaDevices?.enumerateDevices) return undefined;
     navigator.mediaDevices
       .enumerateDevices()
       .then((devices) => {
@@ -69,7 +67,7 @@ function OutputDeviceSection() {
           fallbackLabel="Select device"
           labelledBy="audio-output-label"
           containerClassName="relative w-full"
-          buttonClassName="w-full bg-pure-black text-white border-2 border-white text-xs px-8 py-[0.5rem] no-drag focus:outline-none focus:border-[var(--accent-color)] transition-colors text-left flex items-center justify-between"
+          buttonClassName="w-full bg-pure-black text-white border-2 border-white text-xs px-8 py-[0.5rem] focus:outline-none focus:border-[var(--accent-color)] transition-colors text-left flex items-center justify-between"
           menuClassName="absolute left-0 mt-2 w-full bg-pure-black border-2 border-white shadow-lg z-50 max-h-[200px] overflow-y-auto"
           labelClassName="truncate"
           chevronClassName="text-white/70 flex-shrink-0 ml-2"
@@ -77,197 +75,157 @@ function OutputDeviceSection() {
         />
       ) : (
         <div className="text-white/60">
-          No audio output devices found. This may require microphone
-          permissions to enumerate devices.
+          No audio output devices found. The browser only lists outputs after
+          microphone permission has been granted, and not every browser
+          supports switching.
         </div>
       )}
 
       <p className="mt-16 text-sm text-white/40">
-        Note: audio output switching may not be supported on all
-        systems. changes will apply to the next track if not supported
-        immediately.
+        Note: audio output switching may not be supported in every browser.
+        Changes apply to the next track if not supported immediately.
       </p>
     </div>
   );
 }
 
-function EngineActions({ engine }) {
-  const { binStatus, engineBusy } = engine;
-  const hasCustomPaths = !!(
-    binStatus?.customFfmpegPath || binStatus?.customFfprobePath
-  );
-  const canDownload = !binStatus?.ffmpeg?.path && !!binStatus?.downloadSupported;
-  return (
-    <div className="flex flex-wrap gap-8 mt-16">
-      <button type="button" disabled={engineBusy} onClick={engine.redetect} className={ACTION_BUTTON}>
-        <RefreshCw size={14} strokeWidth={2} />
-        detect again
-      </button>
-      <button type="button" disabled={engineBusy} onClick={() => engine.locate("ffmpeg")} className={ACTION_BUTTON}>
-        <FolderSearch size={14} strokeWidth={2} />
-        locate ffmpeg…
-      </button>
-      <button type="button" disabled={engineBusy} onClick={() => engine.locate("ffprobe")} className={ACTION_BUTTON}>
-        <FolderSearch size={14} strokeWidth={2} />
-        locate ffprobe…
-      </button>
-      {hasCustomPaths && (
-        <button type="button" disabled={engineBusy} onClick={engine.useDetected} className={QUIET_BUTTON}>
-          forget custom paths
-        </button>
-      )}
-      {canDownload && (
-        <button type="button" disabled={engineBusy} onClick={engine.download} className={ACCENT_BUTTON}>
-          <Download size={14} strokeWidth={2} />
-          download ffmpeg
-        </button>
-      )}
-      {binStatus?.hasDownloaded && (
-        <button type="button" disabled={engineBusy} onClick={engine.removeDownloaded} className={QUIET_BUTTON}>
-          <Trash size={14} strokeWidth={2} />
-          remove downloaded ({formatMB(binStatus.downloadedBytes)})
-        </button>
-      )}
-    </div>
-  );
-}
+const ENGINE_BADGE = {
+  native: "border-white/40 text-white",
+  mediabunny: "border-[var(--accent-color)] text-white",
+  "audio-decode": "border-[var(--accent-color)] text-white",
+  none: "border-red-500/60 text-red-400",
+};
 
-function InvalidPathNotice({ kind, entry, path }) {
-  if (!entry?.customInvalid) return null;
-  return (
-    <p className="mt-8 text-sm text-red-400">
-      the custom {kind} path ({path}) does not run.
-    </p>
-  );
-}
+function DecodersSection() {
+  const [rows, setRows] = useState(null);
 
-function AudioEngineSection({ engine }) {
-  const { binStatus, downloadProgress, engineMessage } = engine;
+  useEffect(() => {
+    let active = true;
+    describeDecoderSupport()
+      .then((result) => {
+        if (active) setRows(result);
+      })
+      .catch(() => {
+        if (active) setRows([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <div>
       <h3 className="text-sm font-bold text-white mb-16 uppercase tracking-wider">
-        Audio Engine
+        Decoders
       </h3>
-      <div className="space-y-12 text-sm">
-        <BinaryRow kind="ffmpeg" entry={binStatus?.ffmpeg} required />
-        <BinaryRow kind="ffprobe" entry={binStatus?.ffprobe} />
-      </div>
-      <p className="mt-8 text-sm text-white/40">
-        ffmpeg decodes formats the browser can't play (aac, m4a, opus,
-        aiff, wma, …). ffprobe is optional: without it ffmpeg reads
-        track lengths itself. system installs (brew, apt, winget,
-        choco, scoop, PATH) are detected automatically.
+      <p className="text-sm text-white/40 mb-12">
+        Everything is decoded in the browser. Formats the browser plays on its
+        own are handed straight to the player; mediabunny decodes the rest
+        through WebCodecs, and @audio/decode's WebAssembly codecs cover the
+        exotic ones (aiff, wma, ac3, dts, amr, ape, wavpack, dsd, …).
       </p>
-      <InvalidPathNotice kind="ffmpeg" entry={binStatus?.ffmpeg} path={binStatus?.customFfmpegPath} />
-      <InvalidPathNotice kind="ffprobe" entry={binStatus?.ffprobe} path={binStatus?.customFfprobePath} />
-      <EngineActions engine={engine} />
-      {downloadProgress && (
-        <div className="mt-12">
-          <div className="w-full h-2 bg-white/10">
-            <div
-              className="h-full bg-[var(--accent-color)] transition-colors duration-300"
-              style={{ width: `${downloadProgress.percent || 0}%` }}
-            />
-          </div>
-          <div className="mt-4 text-xs text-white/50">
-            {formatMB(downloadProgress.downloaded)} /{" "}
-            {formatMB(downloadProgress.total)}
-          </div>
+      {rows === null ? (
+        <div className="text-sm text-white/60">checking…</div>
+      ) : (
+        <div className="grid grid-cols-2 gap-x-16 gap-y-4 text-sm">
+          {rows.map(({ ext, engine }) => (
+            <div key={ext} className="flex items-center justify-between gap-8 min-w-0">
+              <span className="font-mono text-white">{ext}</span>
+              <span
+                className={`text-[11px] px-8 py-[2px] border whitespace-nowrap truncate ${ENGINE_BADGE[engine]}`}
+                title={ENGINE_LABELS[engine]}
+              >
+                {ENGINE_LABELS[engine]}
+              </span>
+            </div>
+          ))}
         </div>
       )}
-      {engineMessage && (
-        <p
-          className={`mt-12 text-sm break-words ${engineMessage.kind === "error" ? "text-red-400" : "text-white/70"}`}
+    </div>
+  );
+}
+
+function CacheSection() {
+  const [stats, setStats] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  const refresh = useCallback(async (isActive = () => true) => {
+    const next = await getMetadataCacheStats();
+    if (isActive()) setStats(next);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    refresh(() => active);
+    return () => {
+      active = false;
+    };
+  }, [refresh]);
+
+  const clear = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await clearMetadataCache();
+      setMessage({ kind: "ok", text: "cached track info removed" });
+    } catch (e) {
+      setMessage({ kind: "error", text: e.message || String(e) });
+    } finally {
+      setBusy(false);
+      refresh();
+    }
+  };
+
+  return (
+    <div>
+      <h3 className="text-sm font-bold text-white mb-16 uppercase tracking-wider">
+        Storage
+      </h3>
+      <div className="text-sm text-white/70 flex items-center justify-between gap-16">
+        <span>cached track lengths and dates</span>
+        <span className="font-mono">
+          {stats ? `${stats.tracks} ${stats.tracks === 1 ? "track" : "tracks"}` : "–"}
+        </span>
+      </div>
+      <p className="mt-8 text-sm text-white/40">
+        Track lengths are kept in the browser's own storage so a folder you
+        have seen before lists instantly. Files dropped in from outside
+        Puter stay in memory only and are gone when the app closes; nothing
+        is written to your Puter drive.
+      </p>
+      <div className="flex flex-wrap gap-8 mt-16">
+        <button
+          type="button"
+          disabled={busy || !stats?.tracks}
+          onClick={clear}
+          className={ACTION_BUTTON}
         >
-          {engineMessage.text}
+          <Trash size={14} strokeWidth={2} />
+          clear cached track info
+        </button>
+        <button type="button" disabled={busy} onClick={() => refresh()} className={ACTION_BUTTON}>
+          <RefreshCw size={14} strokeWidth={2} />
+          refresh
+        </button>
+      </div>
+      {message && (
+        <p
+          className={`mt-12 text-sm break-words ${message.kind === "error" ? "text-red-400" : "text-white/70"}`}
+        >
+          {message.text}
         </p>
       )}
     </div>
   );
 }
 
-function StorageSection({ engine }) {
-  const { cacheInfo, engineBusy, maxCacheInput, setMaxCacheInput } = engine;
-  const importsCount = cacheInfo?.importsCount;
-  const maxMB = cacheInfo?.maxBytes
-    ? Math.round(cacheInfo.maxBytes / 1024 / 1024)
-    : "–";
-  return (
-    <div>
-      <h3 className="text-sm font-bold text-white mb-16 uppercase tracking-wider">
-        Storage
-      </h3>
-      <div className="text-sm text-white/70 space-y-4">
-        <div className="flex items-center justify-between gap-16">
-          <span>downloaded ffmpeg</span>
-          <span className="font-mono">{formatMB(cacheInfo?.binariesBytes)}</span>
-        </div>
-        <div className="flex items-center justify-between gap-16">
-          <span>
-            imported file copies
-            {importsCount ? ` (${importsCount})` : ""}
-          </span>
-          <span className="font-mono">{formatMB(cacheInfo?.importsBytes)}</span>
-        </div>
-        <div className="flex items-center justify-between gap-16 border-t border-white/20 pt-4 text-white">
-          <span>total</span>
-          <span className="font-mono">
-            {formatMB(cacheInfo?.totalBytes)} / {maxMB} MB
-          </span>
-        </div>
-      </div>
-      <div className="flex items-center gap-16 mt-16">
-        <label
-          htmlFor="cache-limit"
-          className="block text-14 font-medium whitespace-nowrap"
-        >
-          Cache limit
-        </label>
-        <input
-          id="cache-limit"
-          type="number"
-          min={10}
-          step={10}
-          value={maxCacheInput}
-          onChange={(e) => setMaxCacheInput(e.target.value)}
-          onBlur={engine.commitMaxCache}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.target.blur();
-            }
-          }}
-          className="w-[110px] bg-pure-black text-white border-2 border-white text-xs px-8 py-[0.5rem] no-drag focus:outline-none focus:border-[var(--accent-color)] transition-colors text-right font-mono"
-        />
-        <span className="text-sm text-white/60">MB</span>
-      </div>
-      <p className="mt-8 text-sm text-white/40">
-        Caps what audinspect keeps on disk: the downloaded ffmpeg plus
-        temporary copies of files dropped in from places that aren't
-        on disk. Oldest copies go first; ffmpeg is never removed
-        automatically, and a download that wouldn't fit is refused.
-      </p>
-      <div className="flex flex-wrap gap-8 mt-16">
-        <button
-          type="button"
-          disabled={engineBusy || !cacheInfo?.importsBytes}
-          onClick={engine.clearImports}
-          className={ACTION_BUTTON}
-        >
-          <Trash size={14} strokeWidth={2} />
-          clear imported copies
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function AudioTab() {
-  const engine = useAudioEngine();
   return (
     <div className="space-y-24">
       <OutputDeviceSection />
-      <AudioEngineSection engine={engine} />
-      <StorageSection engine={engine} />
+      <DecodersSection />
+      <CacheSection />
     </div>
   );
 }

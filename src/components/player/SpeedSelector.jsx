@@ -60,12 +60,12 @@ export default function SpeedSelector() {
             }
           }}
           onBlur={(e) => commit(e.target.value)}
-          className="bg-pure-black text-white border-2 border-white text-xs w-[70px] pr-6 py-[0.5rem] no-drag focus:outline-none focus:border-[var(--accent-color)] transition-colors text-right"
+          className="bg-pure-black text-white border-2 border-white text-xs w-[70px] pr-6 py-[0.5rem] focus:outline-none focus:border-[var(--accent-color)] transition-colors text-right"
           aria-label="Playback speed"
         />
         <button
           type="button"
-          className="absolute right-1 top-1/2 -translate-y-1/2 text-white/70 px-1 py-1 no-drag"
+          className="absolute right-1 top-1/2 -translate-y-1/2 text-white/70 px-1 py-1"
           aria-label="Playback speed presets"
           aria-haspopup="listbox"
           aria-expanded={isMenuOpen}
@@ -97,7 +97,7 @@ export default function SpeedSelector() {
                     setPlaybackSpeed(speed);
                     setIsMenuOpen(false);
                   }}
-                  className={`w-full flex items-center justify-between px-2 py-2 text-xs no-drag transition-colors ${
+                  className={`w-full flex items-center justify-between px-2 py-2 text-xs transition-colors ${
                     isActive
                       ? "bg-[var(--accent-color)] text-white"
                       : "bg-pure-black text-white hover:bg-white hover:text-pure-black"

@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import platform from "../platform";
 import usePlayerStore from "../store/usePlayerStore";
 import {
   saveDurationsFromProbeResults,
@@ -36,7 +37,7 @@ export function useDurations({
 
   // per-file progress events from the batch probe
   useEffect(() => {
-    const api = window.electronAPI;
+    const api = platform;
     if (!api || typeof api.onProbeDurationsProgress !== "function") {
       return undefined;
     }
@@ -117,7 +118,7 @@ export function useDurations({
 
   // probe whatever is still unknown
   useEffect(() => {
-    const api = window.electronAPI;
+    const api = platform;
     if (!api || typeof api.probeDurationsForFiles !== "function") {
       return undefined;
     }

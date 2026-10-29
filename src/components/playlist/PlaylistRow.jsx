@@ -96,7 +96,7 @@ export default function PlaylistRow({
           type="button"
           onClick={() => loadAtIndex(idx)}
           aria-current={isCurrent ? "true" : undefined}
-          className="flex items-center gap-8 flex-1 min-w-0 h-full text-left cursor-pointer no-drag"
+          className="flex items-center gap-8 flex-1 min-w-0 h-full text-left cursor-pointer"
         >
           <span
             className={`w-8 h-8 ${dotClasses(isCurrent, isPlaying)} rounded-full flex-shrink-0`}
@@ -111,7 +111,7 @@ export default function PlaylistRow({
         {!currentFolderPath && (
           <button
             type="button"
-            className="opacity-0 ml-[0.6rem] group-hover:opacity-100 focus-visible:opacity-100 transition-opacity bg-pure-black border border-white hover:bg-white hover:text-pure-black text-white p-4 no-drag flex-shrink-0"
+            className="opacity-0 ml-[0.6rem] group-hover:opacity-100 focus-visible:opacity-100 transition-opacity bg-pure-black border border-white hover:bg-white hover:text-pure-black text-white p-4 flex-shrink-0"
             onClick={() => onDeleteTrack(idx)}
             aria-label={`Delete ${name}`}
           >

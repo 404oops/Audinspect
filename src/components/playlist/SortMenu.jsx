@@ -36,7 +36,7 @@ export default function SortMenu({ sortMode, setSortMode }) {
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-label={`Sort order: ${currentLabel}`}
-        className="bg-pure-black text-white border-2 border-white text-sm w-[185px] px-8 h-[40px] no-drag focus:outline-none focus:border-[var(--accent-color)] transition-colors text-left flex items-center justify-between"
+        className="bg-pure-black text-white border-2 border-white text-sm w-[185px] px-8 h-[40px] focus:outline-none focus:border-[var(--accent-color)] transition-colors text-left flex items-center justify-between"
       >
         <span>{currentLabel}</span>
         <ChevronDown size={14} strokeWidth={2} className="text-white/70" />
@@ -59,7 +59,7 @@ export default function SortMenu({ sortMode, setSortMode }) {
                   setSortMode(option.value);
                   setIsOpen(false);
                 }}
-                className={`w-full flex items-center justify-between px-8 py-8 text-sm no-drag transition-colors ${
+                className={`w-full flex items-center justify-between px-8 py-8 text-sm transition-colors ${
                   isActive
                     ? "bg-[var(--accent-color)] text-white"
                     : "bg-pure-black text-white hover:bg-white hover:text-pure-black"

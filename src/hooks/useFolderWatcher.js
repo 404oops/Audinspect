@@ -1,10 +1,11 @@
 import { useEffect } from "react";
+import platform from "../platform";
 import usePlayerStore from "../store/usePlayerStore";
 
 // keeps the list in sync with files added to / removed from the open folder
 export function useFolderWatcher({ currentFolderPath, durationsRef, ffprobeAttemptsRef }) {
   useEffect(() => {
-    const api = window.electronAPI;
+    const api = platform;
     if (!api || typeof api.onFolderFilesDelta !== "function") return undefined;
 
     const unsubscribe = api.onFolderFilesDelta((payload) => {

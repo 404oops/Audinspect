@@ -6,31 +6,9 @@ const isTypingTarget = (target) =>
     target.tagName === "TEXTAREA" ||
     target.isContentEditable);
 
-// hardware media keys (via the main process), keyboard shortcuts and the
-// os media session controls, all routed to the stable player actions
+// keyboard shortcuts and the browser's media session controls (hardware
+// media keys arrive through the latter), all routed to the stable actions
 export function useMediaKeys(actions) {
-  useEffect(() => {
-    const api = window.electronAPI;
-    if (!api) return undefined;
-    const unsubscribes = [];
-    if (typeof api.onMediaPlayPause === "function") {
-      unsubscribes.push(api.onMediaPlayPause(() => actions.togglePlay()));
-    }
-    if (typeof api.onMediaNext === "function") {
-      unsubscribes.push(api.onMediaNext(() => actions.next()));
-    }
-    if (typeof api.onMediaPrevious === "function") {
-      unsubscribes.push(api.onMediaPrevious(() => actions.prev()));
-    }
-    return () => {
-      unsubscribes.forEach((fn) => {
-        try {
-          if (typeof fn === "function") fn();
-        } catch (e) { }
-      });
-    };
-  }, [actions]);
-
   useEffect(() => {
     const onKey = (e) => {
       if (isTypingTarget(e.target)) return;

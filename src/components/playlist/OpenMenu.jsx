@@ -5,7 +5,7 @@ export default function OpenMenu({ onOpenFile, onOpenFolder }) {
   const [isOpen, setIsOpen] = useState(false);
 
   const itemClass =
-    "w-full flex items-center gap-4 px-8 py-8 text-sm text-white hover:bg-white hover:text-pure-black no-drag";
+    "w-full flex items-center gap-4 px-8 py-8 text-sm text-white hover:bg-white hover:text-pure-black";
 
   return (
     <div
@@ -20,7 +20,7 @@ export default function OpenMenu({ onOpenFile, onOpenFolder }) {
       <button
         type="button"
         title="Open files or folder"
-        className="w-[110px] bg-[var(--accent-color)] border-2 border-[var(--accent-color)] hover:bg-white hover:text-[var(--accent-color)] text-white px-8 h-[40px] transition-colors duration-200 no-drag flex items-center justify-between gap-4"
+        className="w-[110px] bg-[var(--accent-color)] border-2 border-[var(--accent-color)] hover:bg-white hover:text-[var(--accent-color)] text-white px-8 h-[40px] transition-colors duration-200 flex items-center justify-between gap-4"
         aria-label="Open files or folder"
         aria-haspopup="menu"
         aria-expanded={isOpen}

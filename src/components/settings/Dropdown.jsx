@@ -59,7 +59,7 @@ export default function Dropdown({
                   onChange(option.value);
                   setIsOpen(false);
                 }}
-                className={`w-full flex items-center justify-between px-2 py-2 text-xs no-drag transition-colors ${isActive
+                className={`w-full flex items-center justify-between px-2 py-2 text-xs transition-colors ${isActive
                     ? "bg-[var(--accent-color)] text-white"
                     : "bg-pure-black text-white hover:bg-white hover:text-pure-black"
                   }`}

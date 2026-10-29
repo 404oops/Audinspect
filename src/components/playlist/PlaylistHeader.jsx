@@ -4,7 +4,7 @@ import SortMenu from "./SortMenu";
 import OpenMenu from "./OpenMenu";
 
 const smallButtonClass =
-  "bg-pure-black border-2 border-white/40 hover:border-white hover:bg-white hover:text-pure-black text-white p-4 transition-colors duration-200 no-drag";
+  "bg-pure-black border-2 border-white/40 hover:border-white hover:bg-white hover:text-pure-black text-white p-4 transition-colors duration-200";
 
 function folderTitle(currentFolderPath) {
   if (!currentFolderPath) return "playlist";

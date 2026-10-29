@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import AudioPlayer from './components/AudioPlayer';
 import TitleBar from './components/TitleBar';
 import Settings from './components/Settings';
-import BinaryDownloader from './components/BinaryDownloader';
 import usePlayerStore from './store/usePlayerStore';
+import platform from './platform';
 
 function App() {
-  const [binariesReady, setBinariesReady] = useState(false);
   const isSettingsOpen = usePlayerStore((state) => state.isSettingsOpen);
   const openSettings = usePlayerStore((state) => state.openSettings);
   const closeSettings = usePlayerStore((state) => state.closeSettings);
@@ -15,11 +14,8 @@ function App() {
     openSettings();
   };
 
-  // application menu / cmd+, shortcut
-  useEffect(() => {
-    const unsubscribe = window.electronAPI?.onMenuOpenSettings?.(() => openSettings());
-    return () => unsubscribe?.();
-  }, [openSettings]);
+  // menubar item / cmd+, shortcut
+  useEffect(() => platform.onMenuOpenSettings(() => openSettings()), [openSettings]);
 
   const handleSettingsClose = () => {
     closeSettings();
@@ -30,15 +26,8 @@ function App() {
       <TitleBar onSettingsClick={handleSettingsClick} />
       <AudioPlayer />
       {isSettingsOpen && <Settings onClose={handleSettingsClose} />}
-      {!binariesReady && (
-        <BinaryDownloader
-          onReady={() => setBinariesReady(true)}
-          onError={(err) => console.error("Binary download error:", err)}
-        />
-      )}
     </div>
   );
 }
 
 export default App;
-

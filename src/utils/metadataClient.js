@@ -1,3 +1,6 @@
+// talks to the indexeddb metadata cache (sizes, mtimes, durations) that
+// lives in a worker so a 2,000-track folder never blocks the ui thread.
+// the browser owns this storage; nothing is written anywhere else.
 let workerInstance = null;
 let nextMessageId = 1;
 const pending = new Map();
@@ -13,49 +16,6 @@ function ensureWorker() {
 
   worker.onmessage = (event) => {
     const msg = event.data || {};
-
-    if (msg.type === "migration:requestLegacy") {
-      if (
-        typeof window !== "undefined" &&
-        window.electronAPI &&
-        typeof window.electronAPI.exportLegacyMetadata === "function"
-      ) {
-        window.electronAPI
-          .exportLegacyMetadata()
-          .then((res) => {
-            const records =
-              res && Array.isArray(res.records) ? res.records : [];
-            worker.postMessage({
-              type: "migration:applyLegacy",
-              payload: { records },
-            });
-          })
-          .catch(() => {
-            worker.postMessage({
-              type: "migration:applyLegacy",
-              payload: { records: [] },
-            });
-          });
-      } else {
-        worker.postMessage({
-          type: "migration:applyLegacy",
-          payload: { records: [] },
-        });
-      }
-      return;
-    }
-
-    if (msg.type === "migration:deleteLegacy") {
-      if (
-        typeof window !== "undefined" &&
-        window.electronAPI &&
-        typeof window.electronAPI.deleteLegacyMetadata === "function"
-      ) {
-        window.electronAPI.deleteLegacyMetadata().catch(() => {});
-      }
-      return;
-    }
-
     const { id } = msg;
     if (!id) return;
     const entry = pending.get(id);
@@ -145,4 +105,19 @@ export async function getCachedDurationsForPaths(paths, metadataByPath) {
   } catch (_e) {
     return [];
   }
+}
+
+export async function getMetadataCacheStats() {
+  try {
+    await initMetadataClient();
+    const stats = await callWorker("stats", null);
+    return stats && typeof stats === "object" ? stats : { tracks: 0 };
+  } catch (_e) {
+    return { tracks: 0 };
+  }
+}
+
+export async function clearMetadataCache() {
+  await initMetadataClient();
+  await callWorker("clear", null);
 }

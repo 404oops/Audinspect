@@ -8,30 +8,6 @@ db.version(1).stores({
   meta: "&key,value",
 });
 
-const META_KEYS = {
-  LEGACY_MIGRATION_COMPLETE: "legacyMigrationComplete",
-};
-
-async function isLegacyMigrationComplete() {
-  try {
-    const row = await db.table("meta").get(META_KEYS.LEGACY_MIGRATION_COMPLETE);
-    return !!(row && row.value && row.value.completed);
-  } catch (_e) {
-    return false;
-  }
-}
-
-async function markLegacyMigrationComplete(info) {
-  const value = {
-    completed: true,
-    migratedAt: Date.now(),
-    ...(info || {}),
-  };
-  try {
-    await db.table("meta").put({ key: META_KEYS.LEGACY_MIGRATION_COMPLETE, value });
-  } catch (_e) {}
-}
-
 function normalizeNumber(v) {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
@@ -166,56 +142,6 @@ async function getCachedDurationsForPaths(payload) {
   return result;
 }
 
-async function applyLegacyRecords(records) {
-  if (!Array.isArray(records) || !records.length) {
-    await markLegacyMigrationComplete({ recordCount: 0 });
-    try {
-      self.postMessage({ type: "migration:deleteLegacy" });
-    } catch (_e) {}
-    return;
-  }
-
-  const now = Date.now();
-  const rows = [];
-
-  for (const rec of records) {
-    if (!rec || !rec.path) continue;
-    const path = String(rec.path);
-
-    rows.push({
-      path,
-      size: normalizeNumber(rec.size),
-      mtimeMs: normalizeNumber(rec.mtimeMs),
-      mtimeIso: normalizeString(rec.mtimeIso),
-      type: normalizeString(rec.type),
-      duration: normalizeNumber(rec.duration),
-      createdAt:
-        normalizeNumber(rec.createdAt) != null
-          ? normalizeNumber(rec.createdAt)
-          : now,
-      updatedAt: now,
-    });
-  }
-
-  if (rows.length) {
-    let wrote = false;
-    try {
-      await db.table("tracks").bulkPut(rows);
-      wrote = true;
-    } catch (_e) {}
-
-    if (!wrote) {
-      return;
-    }
-  }
-
-  await markLegacyMigrationComplete({ recordCount: rows.length });
-
-  try {
-    self.postMessage({ type: "migration:deleteLegacy" });
-  } catch (_e) {}
-}
-
 self.onmessage = async (event) => {
   const message = event.data || {};
   const { id, type, payload } = message;
@@ -227,15 +153,8 @@ self.onmessage = async (event) => {
 
   try {
     if (type === "init") {
-      const migrated = await isLegacyMigrationComplete();
-      reply({
-        ok: true,
-        type: "init:result",
-        payload: { legacyMigrationComplete: migrated },
-      });
-      if (!migrated) {
-        self.postMessage({ type: "migration:requestLegacy" });
-      }
+      await db.open();
+      reply({ ok: true, type: "init:result", payload: null });
       return;
     }
 
@@ -261,10 +180,15 @@ self.onmessage = async (event) => {
       return;
     }
 
-    if (type === "migration:applyLegacy") {
-      const records = payload?.records || [];
-      await applyLegacyRecords(records);
-      reply({ ok: true, type: "migration:applyLegacy:result", payload: null });
+    if (type === "stats") {
+      const tracks = await db.table("tracks").count();
+      reply({ ok: true, type: "stats:result", payload: { tracks } });
+      return;
+    }
+
+    if (type === "clear") {
+      await db.table("tracks").clear();
+      reply({ ok: true, type: "clear:result", payload: null });
       return;
     }
 

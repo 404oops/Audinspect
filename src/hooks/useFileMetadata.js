@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import platform from "../platform";
 import usePlayerStore from "../store/usePlayerStore";
 import {
   initMetadataClient,
@@ -32,7 +33,7 @@ export function useFileMetadata(files) {
   }, []);
 
   useEffect(() => {
-    const api = window.electronAPI;
+    const api = platform;
     if (!api || typeof api.getFileMetadata !== "function") return undefined;
     let cancelled = false;
 
@@ -76,7 +77,7 @@ export function useFileMetadata(files) {
   }, [files, setFileMetadata]);
 
   useEffect(() => {
-    const api = window.electronAPI;
+    const api = platform;
     if (!api || typeof api.onFilesMetadataDelta !== "function") return undefined;
 
     const unsubscribe = api.onFilesMetadataDelta((items) => {

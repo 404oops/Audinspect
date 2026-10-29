@@ -6,7 +6,7 @@ export default function Toast({ message, onClose }) {
       <button
         type="button"
         onClick={onClose}
-        className="bg-pure-black border-2 border-white text-white px-16 py-8 shadow-lg no-drag"
+        className="bg-pure-black border-2 border-white text-white px-16 py-8 shadow-lg"
       >
         {message}
       </button>

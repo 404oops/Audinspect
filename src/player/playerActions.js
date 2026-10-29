@@ -1,5 +1,7 @@
 import { getVisibleRows } from "../utils/playlistSort";
-import { isAudioName } from "../utils/audioExtensions";
+import platform from "../platform";
+import { collectDroppedFiles } from "../platform/virtualFiles";
+import { settingsStorage } from "../platform/settingsStorage";
 import { createWaveSurfer } from "./createWaveSurfer";
 import { loadTrack } from "./loadTrack";
 
@@ -28,7 +30,7 @@ export function createPlayerActions({ refs, store }) {
   } = refs;
 
   const S = () => store.getState();
-  const api = () => window.electronAPI;
+  const api = () => platform;
 
   const setPlaying = (playing) => {
     isPlayingRef.current = playing;
@@ -152,7 +154,7 @@ export function createPlayerActions({ refs, store }) {
     hasFolderWatchRef.current = false;
     S().setCurrentFolderPath(null);
     try {
-      localStorage.removeItem("lastOpenedFolder");
+      settingsStorage.removeItem("lastOpenedFolder");
     } catch (e) { }
   }
 
@@ -190,8 +192,8 @@ export function createPlayerActions({ refs, store }) {
     await watchFolder(folder);
     await preloadMetadataForInitialSort(list);
     S().setFiles(list || []);
-    if (remember && localStorage.getItem("rememberLastFolder") === "true") {
-      localStorage.setItem("lastOpenedFolder", folder);
+    if (remember && settingsStorage.getItem("rememberLastFolder") === "true") {
+      settingsStorage.setItem("lastOpenedFolder", folder);
     }
     return list || [];
   }
@@ -216,8 +218,8 @@ export function createPlayerActions({ refs, store }) {
 
   // "open to last folder on startup"; skipped when the os handed us a file
   async function loadLastFolder() {
-    const rememberLastFolder = localStorage.getItem("rememberLastFolder");
-    const lastFolder = localStorage.getItem("lastOpenedFolder");
+    const rememberLastFolder = settingsStorage.getItem("rememberLastFolder");
+    const lastFolder = settingsStorage.getItem("lastOpenedFolder");
 
     if (osOpenHandledRef.current) return;
     if (rememberLastFolder !== "true" || !lastFolder || !api()) return;
@@ -238,7 +240,7 @@ export function createPlayerActions({ refs, store }) {
       }
     } catch (err) {
       console.warn("Failed to load last folder:", err);
-      localStorage.removeItem("lastOpenedFolder");
+      settingsStorage.removeItem("lastOpenedFolder");
     }
   }
 
@@ -265,7 +267,7 @@ export function createPlayerActions({ refs, store }) {
     if (!input.length || !api()) return;
     if (fromOs) {
       osOpenHandledRef.current = true;
-      console.info("opened via os:", input);
+      console.info("opened via puter:", input);
     }
 
     let expanded;
@@ -551,68 +553,40 @@ export function createPlayerActions({ refs, store }) {
     return null;
   };
 
-  // turns dropped File objects into playlist entries. files that live on
-  // disk are used in place (folders expand); only files without a path, e.g.
-  // dragged out of a browser, get copied into the capped imports cache.
-  async function resolveDroppedFiles(dropped) {
-    const realPaths = [];
-    const fallback = [];
-    dropped.forEach((f) => {
-      const p =
-        api() && typeof api().getPathForFile === "function"
-          ? api().getPathForFile(f)
-          : "";
-      if (p) realPaths.push(p);
-      else fallback.push(f);
-    });
+  // puter drags carry no coordinates, only the element under the pointer
+  const getDropTargetForElement = (el) => {
+    if (!el || typeof el.nodeType !== "number") return null;
+    if (playerAreaRef.current && playerAreaRef.current.contains(el)) return "player";
+    if (playlistAreaRef.current && playlistAreaRef.current.contains(el)) return "playlist";
+    return null;
+  };
 
-    const entries = [];
-    let unsupported = 0;
-
-    if (realPaths.length) {
-      try {
-        const res = await api().expandPaths(realPaths);
-        (res && res.files ? res.files : []).forEach((p) =>
-          entries.push({ path: p })
-        );
-        unsupported += (res && res.unsupported) || 0;
-      } catch (err) {
-        console.warn("Failed to expand dropped paths:", err);
-        unsupported += realPaths.length;
-      }
+  // files dragged in from outside puter (host os, browser tab). they stay
+  // in memory for the session; dropped folders are walked for audio files.
+  async function resolveDroppedFiles(dataTransfer) {
+    try {
+      return await collectDroppedFiles(dataTransfer);
+    } catch (err) {
+      console.warn("Failed to read dropped files:", err);
+      return { entries: [], unsupported: 0 };
     }
-
-    const imported = await Promise.all(
-      fallback.map(async (f) => {
-        if (!isAudioName(f.name)) return null;
-        try {
-          const bytes = new Uint8Array(await f.arrayBuffer());
-          const res = await api().processFromBytes(f.name, bytes);
-          if (res && res.path) return { path: res.path, name: f.name };
-          if (res && res.error) S().showToast(res.error);
-          return null;
-        } catch (err) {
-          console.warn(`Failed to import ${f.name}:`, err);
-          return null;
-        }
-      })
-    );
-    imported.forEach((entry) => {
-      if (entry) entries.push(entry);
-      else unsupported += 1;
-    });
-
-    return { entries, unsupported };
   }
 
-  async function handleDroppedFiles(dropped, target) {
-    // a folder view mirrors what's on disk, so nothing gets added to it
-    if (S().currentFolderPath) {
-      S().showToast("close the folder (x next to its name) to add files");
-      return;
+  // items dragged out of the puter desktop; folders expand
+  async function resolveDroppedPaths(paths) {
+    try {
+      const res = await api().expandPaths(paths);
+      return {
+        entries: (res && res.files ? res.files : []).map((p) => ({ path: p })),
+        unsupported: (res && res.unsupported) || 0,
+      };
+    } catch (err) {
+      console.warn("Failed to expand dropped paths:", err);
+      return { entries: [], unsupported: (paths || []).length };
     }
+  }
 
-    const { entries, unsupported } = await resolveDroppedFiles(dropped);
+  function addDroppedEntries({ entries, unsupported }, target) {
     if (unsupported) {
       S().showToast(
         `${unsupported} unsupported file${unsupported > 1 ? "s" : ""} skipped`
@@ -627,6 +601,23 @@ export function createPlayerActions({ refs, store }) {
     }
 
     appendFilesToPlaylist(entries, { autoPlayIfEmpty: true });
+  }
+
+  // a folder view mirrors what's on disk, so nothing gets added to it
+  function refuseDropInFolderMode() {
+    if (!S().currentFolderPath) return false;
+    S().showToast("close the folder (x next to its name) to add files");
+    return true;
+  }
+
+  async function handleDroppedFiles(dataTransfer, target) {
+    if (refuseDropInFolderMode()) return;
+    addDroppedEntries(await resolveDroppedFiles(dataTransfer), target);
+  }
+
+  async function handleDroppedPaths(paths, target) {
+    if (refuseDropInFolderMode()) return;
+    addDroppedEntries(await resolveDroppedPaths(paths), target);
   }
 
   function confirmDropReplace() {
@@ -676,7 +667,9 @@ export function createPlayerActions({ refs, store }) {
     replaceCurrentTrackWithFiles,
     handleDeleteTrack,
     getDropTarget,
+    getDropTargetForElement,
     handleDroppedFiles,
+    handleDroppedPaths,
     confirmDropReplace,
     confirmDropAdd,
     cancelDrop,

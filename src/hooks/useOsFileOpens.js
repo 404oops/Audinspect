@@ -1,15 +1,16 @@
 import { useEffect } from "react";
+import platform from "../platform";
 
 const call = (fn, ...args) =>
   Promise.resolve(fn(...args)).catch((e) =>
     console.warn(`${fn.name || "handler"} failed:`, e)
   );
 
-// application menu items and files handed over by the os (double-click,
-// "open with", command line), both at launch and while running
+// menubar items and files handed over by puter (double-click, "open
+// with…", ?file= links), both at launch and while running
 export function useOsFileOpens(actions) {
   useEffect(() => {
-    const api = window.electronAPI;
+    const api = platform;
     if (!api) return undefined;
     const unsubs = [];
     const fromOs = { play: true, fromOs: true };

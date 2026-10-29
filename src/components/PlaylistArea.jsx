@@ -27,6 +27,7 @@ export default function PlaylistArea({
   onCloseFolder,
   onClearPlaylist,
   onDragOver,
+  onDragEnter,
   onDragLeave,
   onDrop,
 }) {
@@ -42,6 +43,7 @@ export default function PlaylistArea({
       className="relative bg-pure-black border-2 border-white flex-1 overflow-hidden flex flex-col"
       style={{ zIndex: 10, pointerEvents: "auto" }}
       onDragOver={onDragOver}
+      onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >

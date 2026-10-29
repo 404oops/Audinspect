@@ -1,17 +1,18 @@
 import { create } from "zustand";
+import { settingsStorage } from "../platform/settingsStorage";
 
 let toastTimeoutId = null;
 
-let initialAccentColor = "#0050ff";
-try {
-  if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
-    const saved = localStorage.getItem("accentColor");
-    if (saved) {
-      initialAccentColor = saved;
-    }
-  }
-} catch (e) { }
+// settings are read synchronously here; main.jsx pulls the puter.kv copy
+// into localStorage before this module is evaluated
+const read = (key) => settingsStorage.getItem(key);
+const readBool = (key, fallback) => {
+  const v = read(key);
+  return v === null ? fallback : v === "true";
+};
+const persist = (key, value) => settingsStorage.setItem(key, String(value));
 
+const initialAccentColor = read("accentColor") || "#0050ff";
 try {
   if (typeof document !== "undefined") {
     document.documentElement.style.setProperty(
@@ -22,72 +23,33 @@ try {
 } catch (e) { }
 
 let initialNudgeAmount = 1.5;
-try {
-  if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
-    const savedNudge = parseFloat(localStorage.getItem("nudgeAmount"));
-    if (!Number.isNaN(savedNudge) && savedNudge >= 0.25 && savedNudge <= 3) {
-      initialNudgeAmount = savedNudge;
-    }
+{
+  const savedNudge = parseFloat(read("nudgeAmount"));
+  if (!Number.isNaN(savedNudge) && savedNudge >= 0.25 && savedNudge <= 3) {
+    initialNudgeAmount = savedNudge;
   }
-} catch (e) { }
+}
 
 // playback speed always resets to 1x on startup (not persisted)
 const initialPlaybackSpeed = 1;
 
 let initialWavesurferTheme = "default";
-try {
-  if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
-    const savedTheme = localStorage.getItem("wavesurferTheme");
-    const allowedNew = ["default", "sleek", "classic"];
-    if (savedTheme && allowedNew.includes(savedTheme)) {
-      initialWavesurferTheme = savedTheme;
-    } else if (savedTheme === "precise") {
-      initialWavesurferTheme = "default";
-    } else if (savedTheme === "minimal") {
-      initialWavesurferTheme = "sleek";
-    }
+{
+  const savedTheme = read("wavesurferTheme");
+  const allowedNew = ["default", "sleek", "classic"];
+  if (savedTheme && allowedNew.includes(savedTheme)) {
+    initialWavesurferTheme = savedTheme;
+  } else if (savedTheme === "precise") {
+    initialWavesurferTheme = "default";
+  } else if (savedTheme === "minimal") {
+    initialWavesurferTheme = "sleek";
   }
-} catch (e) { }
+}
 
-let initialWavesurferShowHover = true;
-try {
-  if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
-    const savedHover = localStorage.getItem("wavesurferShowHover");
-    if (savedHover !== null) {
-      initialWavesurferShowHover = savedHover === "true";
-    }
-  }
-} catch (e) { }
-
-let initialAudioOutputDevice = "";
-try {
-  if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
-    const savedDevice = localStorage.getItem("audioOutputDevice");
-    if (savedDevice) {
-      initialAudioOutputDevice = savedDevice;
-    }
-  }
-} catch (e) { }
-
-let initialPreservePitch = true;
-try {
-  if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
-    const savedPreservePitch = localStorage.getItem("preservePitch");
-    if (savedPreservePitch !== null) {
-      initialPreservePitch = savedPreservePitch === "true";
-    }
-  }
-} catch (e) { }
-
-let initialPlayOnSeekWhenPaused = false;
-try {
-  if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
-    const savedPlayOnSeek = localStorage.getItem("playOnSeekWhenPaused");
-    if (savedPlayOnSeek !== null) {
-      initialPlayOnSeekWhenPaused = savedPlayOnSeek === "true";
-    }
-  }
-} catch (e) { }
+const initialWavesurferShowHover = readBool("wavesurferShowHover", true);
+const initialAudioOutputDevice = read("audioOutputDevice") || "";
+const initialPreservePitch = readBool("preservePitch", true);
+const initialPlayOnSeekWhenPaused = readBool("playOnSeekWhenPaused", false);
 
 const usePlayerStore = create((set, get) => ({
   // core playback / selection
@@ -128,7 +90,6 @@ const usePlayerStore = create((set, get) => ({
   // global ui
   accentColor: initialAccentColor,
   isSettingsOpen: false,
-  isWindowMaximized: false,
 
   // actions: basic setters
   setFiles: (updater) =>
@@ -148,11 +109,7 @@ const usePlayerStore = create((set, get) => ({
         typeof amount === "number" && Number.isFinite(amount)
           ? Math.min(3, Math.max(0.25, amount))
           : state.nudgeAmount;
-      try {
-        if (typeof localStorage !== "undefined") {
-          localStorage.setItem("nudgeAmount", rangeClamped.toString());
-        }
-      } catch (e) { }
+      persist("nudgeAmount", rangeClamped);
       return { nudgeAmount: rangeClamped };
     }),
   setPlaybackSpeed: (speed) =>
@@ -167,46 +124,26 @@ const usePlayerStore = create((set, get) => ({
     const allowed = ["default", "sleek", "classic"];
     if (!theme || !allowed.includes(theme)) return;
     set({ wavesurferTheme: theme });
-    try {
-      if (typeof localStorage !== "undefined") {
-        localStorage.setItem("wavesurferTheme", theme);
-      }
-    } catch (e) { }
+    persist("wavesurferTheme", theme);
   },
   setWavesurferShowHover: (show) => {
     const val = Boolean(show);
     set({ wavesurferShowHover: val });
-    try {
-      if (typeof localStorage !== "undefined") {
-        localStorage.setItem("wavesurferShowHover", val.toString());
-      }
-    } catch (e) { }
+    persist("wavesurferShowHover", val);
   },
   setAudioOutputDevice: (deviceId) => {
     set({ audioOutputDevice: deviceId || "" });
-    try {
-      if (typeof localStorage !== "undefined") {
-        localStorage.setItem("audioOutputDevice", deviceId || "");
-      }
-    } catch (e) { }
+    persist("audioOutputDevice", deviceId || "");
   },
   setPreservePitch: (preserve) => {
     const val = Boolean(preserve);
     set({ preservePitch: val });
-    try {
-      if (typeof localStorage !== "undefined") {
-        localStorage.setItem("preservePitch", val.toString());
-      }
-    } catch (e) { }
+    persist("preservePitch", val);
   },
   setPlayOnSeekWhenPaused: (enabled) => {
     const val = Boolean(enabled);
     set({ playOnSeekWhenPaused: val });
-    try {
-      if (typeof localStorage !== "undefined") {
-        localStorage.setItem("playOnSeekWhenPaused", val.toString());
-      }
-    } catch (e) { }
+    persist("playOnSeekWhenPaused", val);
   },
   setFolderTree: (folderTree) => set({ folderTree }),
   setDurations: (durations) => set({ durations }),
@@ -223,52 +160,44 @@ const usePlayerStore = create((set, get) => ({
       if (typeof document !== "undefined") {
         document.documentElement.style.setProperty("--accent-color", color);
       }
-      if (typeof localStorage !== "undefined") {
-        localStorage.setItem("accentColor", color);
-      }
     } catch (e) { }
+    persist("accentColor", color);
   },
 
   openSettings: () => set({ isSettingsOpen: true }),
   closeSettings: () => set({ isSettingsOpen: false }),
-  toggleWindowMaximized: () =>
-    set((state) => ({ isWindowMaximized: !state.isWindowMaximized })),
 
-  // sort mode + folder path with localstorage integration
+  // sort mode + folder path with persisted preferences
   setCurrentFolderPath: (currentFolderPath) => {
     set({ currentFolderPath });
     // when folder changes, try to restore sort mode from storage
-    try {
-      const remember = localStorage.getItem("rememberLastSortMode") === "true";
-      if (!remember) return;
-      const scope = localStorage.getItem("sortModeScope") || "global";
-      let savedSort = null;
-      if (scope === "perFolder" && currentFolderPath) {
-        savedSort = localStorage.getItem(`lastSortMode:${currentFolderPath}`);
-      } else if (scope === "global") {
-        savedSort = localStorage.getItem("lastSortMode");
-      }
-      if (savedSort) {
-        set({ sortMode: savedSort });
-      }
-    } catch (e) { }
+    const remember = read("rememberLastSortMode") === "true";
+    if (!remember) return;
+    const scope = read("sortModeScope") || "global";
+    let savedSort = null;
+    if (scope === "perFolder" && currentFolderPath) {
+      savedSort = read(`lastSortMode:${currentFolderPath}`);
+    } else if (scope === "global") {
+      savedSort = read("lastSortMode");
+    }
+    if (savedSort) {
+      set({ sortMode: savedSort });
+    }
   },
 
   setSortMode: (sortMode) => {
     set({ sortMode });
-    try {
-      const remember = localStorage.getItem("rememberLastSortMode") === "true";
-      if (!remember || !sortMode) return;
-      const scope = localStorage.getItem("sortModeScope") || "global";
-      const { currentFolderPath } = get();
-      if (scope === "perFolder") {
-        if (currentFolderPath) {
-          localStorage.setItem(`lastSortMode:${currentFolderPath}`, sortMode);
-        }
-      } else {
-        localStorage.setItem("lastSortMode", sortMode);
+    const remember = read("rememberLastSortMode") === "true";
+    if (!remember || !sortMode) return;
+    const scope = read("sortModeScope") || "global";
+    const { currentFolderPath } = get();
+    if (scope === "perFolder") {
+      if (currentFolderPath) {
+        persist(`lastSortMode:${currentFolderPath}`, sortMode);
       }
-    } catch (e) { }
+    } else {
+      persist("lastSortMode", sortMode);
+    }
   },
 
   // toast helpers managed in store (so component can stay stateless for this)

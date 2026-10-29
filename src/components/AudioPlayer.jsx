@@ -109,13 +109,14 @@ export default function AudioPlayer() {
     duration,
     getDisplayName: actions.getDisplayName,
   });
-  const { handleDragOver, handleDragLeave, handleDrop } =
+  const { handleDragOver, handleDragEnter, handleDragLeave, handleDrop } =
     useDragHandlers(actions);
 
   return (
     <div
       className="flex flex-col flex-1 min-h-0 overflow-hidden bg-pure-black p-24 gap-24"
       onDragOver={handleDragOver}
+      onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
@@ -178,6 +179,7 @@ export default function AudioPlayer() {
         onCloseFolder={actions.closeFolder}
         onClearPlaylist={actions.clearPlaylist}
         onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       />

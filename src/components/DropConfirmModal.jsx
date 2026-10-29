@@ -14,21 +14,21 @@ export default function DropConfirmModal({ dropConfirm, onReplace, onAdd, onCanc
           <button
             type="button"
             onClick={onCancel}
-            className="flex flex-row items-center gap-8 bg-pure-black border-2 border-white/40 hover:border-white text-white px-16 py-8 no-drag whitespace-nowrap"
+            className="flex flex-row items-center gap-8 bg-pure-black border-2 border-white/40 hover:border-white text-white px-16 py-8 whitespace-nowrap"
           >
             cancel
           </button>
           <button
             type="button"
             onClick={onAdd}
-            className="flex flex-row items-center gap-8 bg-pure-black border-2 border-white hover:bg-white hover:text-pure-black text-white px-16 py-8 no-drag whitespace-nowrap"
+            className="flex flex-row items-center gap-8 bg-pure-black border-2 border-white hover:bg-white hover:text-pure-black text-white px-16 py-8 whitespace-nowrap"
           >
             add to playlist
           </button>
           <button
             type="button"
             onClick={onReplace}
-            className="flex flex-row items-center gap-8 bg-[var(--accent-color)] border-2 border-[var(--accent-color)] hover:bg-white hover:text-[var(--accent-color)] text-white px-16 py-8 no-drag whitespace-nowrap"
+            className="flex flex-row items-center gap-8 bg-[var(--accent-color)] border-2 border-[var(--accent-color)] hover:bg-white hover:text-[var(--accent-color)] text-white px-16 py-8 whitespace-nowrap"
           >
             replace current track
           </button>
