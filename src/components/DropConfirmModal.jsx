@@ -10,7 +10,7 @@ export default function DropConfirmModal({ dropConfirm, onReplace, onAdd, onCanc
             ? "replace the current track or add this file to the playlist"
             : "replace the current track with the first file or add all to the playlist"}
         </div>
-        <div className="flex items-center justify-start gap-8 mt-8">
+        <div className="flex flex-wrap items-center justify-start gap-8 mt-8">
           <button
             type="button"
             onClick={onCancel}

@@ -63,30 +63,38 @@ export default function PlayerArea({
         handleWaveMouseLeave={handleWaveMouseLeave}
       />
 
-      <div className="p-16 bg-pure-black border-t-2 border-white">
-        <div className="grid grid-cols-3 items-center gap-16">
-          <VolumeControl volume={volume} setVolume={setVolume} />
+      <div className="p-[12px] sm:p-16 bg-pure-black border-t-2 border-white">
+        {/* three columns side by side; on a phone the transport comes first,
+            then the volume, then the clock and speed on a row of their own */}
+        <div className="flex flex-col gap-[12px] sm:grid sm:grid-cols-3 sm:items-center sm:gap-16">
+          <div className="order-2 sm:order-none min-w-0">
+            <VolumeControl volume={volume} setVolume={setVolume} />
+          </div>
 
-          <TransportControls
-            hop={hop}
-            prev={prev}
-            next={next}
-            togglePlay={togglePlay}
-            isPlaying={isPlaying}
-            isLoaded={isLoaded}
-            nudgeAmount={nudgeAmount}
-          />
+          <div className="order-1 sm:order-none">
+            <TransportControls
+              hop={hop}
+              prev={prev}
+              next={next}
+              togglePlay={togglePlay}
+              isPlaying={isPlaying}
+              isLoaded={isLoaded}
+              nudgeAmount={nudgeAmount}
+            />
+          </div>
 
-          <div className="flex items-center gap-4 sm:gap-6 md:gap-8 justify-end">
-            <div
-              ref={timeDisplayRef}
-              className="text-sm font-mono text-white"
-            >
-              {formatTime(time)}
-            </div>
-            <div className="text-xs text-white/40">/</div>
-            <div className="text-sm font-mono text-white/60">
-              {formatTime(duration)}
+          <div className="order-3 sm:order-none flex items-center gap-4 sm:gap-6 md:gap-8 justify-between sm:justify-end">
+            <div className="flex items-center gap-4 sm:gap-6 md:gap-8">
+              <div
+                ref={timeDisplayRef}
+                className="text-sm font-mono text-white"
+              >
+                {formatTime(time)}
+              </div>
+              <div className="text-xs text-white/40">/</div>
+              <div className="text-sm font-mono text-white/60">
+                {formatTime(duration)}
+              </div>
             </div>
             <SpeedSelector />
           </div>

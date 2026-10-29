@@ -12,16 +12,18 @@ export const ROW_GAP = 12;
 export const ITEM_HEIGHT = 40;
 export const ROW_HEIGHT = ROW_GAP + ITEM_HEIGHT;
 
-function buildMetaLabel(meta, lengthSec) {
+// the pieces of the grey label after the name; the date only fits on wide
+// screens, so it is marked and hidden below the sm breakpoint
+function buildMetaPieces(meta, lengthSec) {
   const pieces = [];
-  if (lengthSec != null) pieces.push(formatTime(lengthSec));
+  if (lengthSec != null) pieces.push({ text: formatTime(lengthSec) });
   if (meta && typeof meta.size === "number") {
     const sizeLabel = formatBytes(meta.size);
-    if (sizeLabel) pieces.push(sizeLabel);
+    if (sizeLabel) pieces.push({ text: sizeLabel });
   }
   if (meta && meta.type) {
     const typeLabel = formatFileType(meta.type);
-    if (typeLabel) pieces.push(typeLabel);
+    if (typeLabel) pieces.push({ text: typeLabel });
   }
   const mtimeSource =
     meta && meta.mtimeIso != null
@@ -31,9 +33,18 @@ function buildMetaLabel(meta, lengthSec) {
         : null;
   if (mtimeSource != null) {
     const dateLabel = formatDateFromMeta(mtimeSource);
-    if (dateLabel) pieces.push(dateLabel);
+    if (dateLabel) pieces.push({ text: dateLabel, wideOnly: true });
   }
-  return pieces.join("  •  ");
+  return pieces;
+}
+
+function MetaLabel({ pieces }) {
+  return pieces.map((piece, i) => (
+    <span key={piece.text} className={piece.wideOnly ? "hidden sm:inline" : undefined}>
+      {i > 0 ? "  •  " : ""}
+      {piece.text}
+    </span>
+  ));
 }
 
 function itemClasses(isCurrent, isSelected) {
@@ -103,15 +114,15 @@ export default function PlaylistRow({
           />
           <span className="flex items-center justify-between gap-4 flex-1 min-w-0">
             <span className="truncate text-white text-sm">{name}</span>
-            <span className="ml-4 text-[11px] text-white/40 text-right flex-shrink-0 max-w-[50%]">
-              {buildMetaLabel(meta, lengthSec)}
+            <span className="ml-4 text-[11px] text-white/40 text-right flex-shrink-0 max-w-[50%] truncate whitespace-pre">
+              <MetaLabel pieces={buildMetaPieces(meta, lengthSec)} />
             </span>
           </span>
         </button>
         {!currentFolderPath && (
           <button
             type="button"
-            className="opacity-0 ml-[0.6rem] group-hover:opacity-100 focus-visible:opacity-100 transition-opacity bg-pure-black border border-white hover:bg-white hover:text-pure-black text-white p-4 flex-shrink-0"
+            className="opacity-0 ml-[0.6rem] group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity bg-pure-black border border-white hover:bg-white hover:text-pure-black text-white p-4 flex-shrink-0"
             onClick={() => onDeleteTrack(idx)}
             aria-label={`Delete ${name}`}
           >

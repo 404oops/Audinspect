@@ -114,7 +114,7 @@ export default function AudioPlayer() {
 
   return (
     <div
-      className="flex flex-col flex-1 min-h-0 overflow-hidden bg-pure-black p-24 gap-24"
+      className="flex flex-col flex-1 min-h-0 overflow-hidden bg-pure-black p-[12px] gap-[12px] sm:p-24 sm:gap-24"
       onDragOver={handleDragOver}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}

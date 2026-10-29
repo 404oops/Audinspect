@@ -24,13 +24,13 @@ export default function PlaylistHeader({
   handleOpenFolder,
 }) {
   return (
-    <div className="bg-pure-black p-16 border-b-2 border-white">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-16">
-          <h3 className="font-bold text-white text-lg">
+    <div className="bg-pure-black p-[12px] sm:p-16 border-b-2 border-white">
+      <div className="flex flex-wrap items-center justify-between gap-x-16 gap-y-8">
+        <div className="flex items-center gap-8 sm:gap-16 min-w-0">
+          <h3 className="font-bold text-white text-lg truncate">
             {folderTitle(currentFolderPath)}
           </h3>
-          <span className="text-xs font-mono text-white/60 bg-white/10 px-8 py-4">
+          <span className="text-xs font-mono text-white/60 bg-white/10 px-8 py-4 whitespace-nowrap">
             {fileCount} {fileCount === 1 ? "file" : "files"}
           </span>
           {currentFolderPath && (
@@ -56,10 +56,14 @@ export default function PlaylistHeader({
             </button>
           )}
         </div>
-        <div className="flex items-center gap-8">
-          <SearchField value={searchQuery} onChange={onSearchChange} />
-          <SortMenu sortMode={sortMode} setSortMode={setSortMode} />
-          <OpenMenu onOpenFile={handleOpenFile} onOpenFolder={handleOpenFolder} />
+        <div className="flex flex-wrap items-center gap-8 flex-1 sm:flex-none justify-end">
+          <div className="flex-1 sm:flex-none min-w-[160px]">
+            <SearchField value={searchQuery} onChange={onSearchChange} />
+          </div>
+          <div className="flex items-center gap-8 ml-auto">
+            <SortMenu sortMode={sortMode} setSortMode={setSortMode} />
+            <OpenMenu onOpenFile={handleOpenFile} onOpenFolder={handleOpenFolder} />
+          </div>
         </div>
       </div>
     </div>

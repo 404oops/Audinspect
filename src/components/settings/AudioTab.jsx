@@ -127,7 +127,7 @@ function DecodersSection() {
       {rows === null ? (
         <div className="text-sm text-white/60">checking…</div>
       ) : (
-        <div className="grid grid-cols-2 gap-x-16 gap-y-4 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-16 gap-y-4 text-sm">
           {rows.map(({ ext, engine }) => (
             <div key={ext} className="flex items-center justify-between gap-8 min-w-0">
               <span className="font-mono text-white">{ext}</span>
