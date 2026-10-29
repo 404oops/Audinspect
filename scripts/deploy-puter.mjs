@@ -75,7 +75,33 @@ async function mapWithConcurrency(items, limit, fn) {
   return results;
 }
 
-const describe = (e) => (e && (e.message || e.error?.message)) || JSON.stringify(e);
+const describe = (e) => {
+  if (!e) return String(e);
+  const parts = [e.message || e.error?.message || e.code];
+  // the sdk's batch upload attaches the failed items with their own errors
+  if (Array.isArray(e.failedItems)) {
+    e.failedItems.forEach((item) => {
+      parts.push(`${item.path || item.name || item.requestIndex} (${item.stage}): ${item.message || item.code || item.status || "unknown error"}`);
+    });
+  }
+  return parts.filter(Boolean).join("; ") || JSON.stringify(e);
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// uploads are individually retried: the puter api occasionally fails a
+// single operation in a batch, and that must not sink the whole deploy
+async function withRetries(label, fn, attempts = 4) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (attempt >= attempts) throw e;
+      console.warn(`  ${label}: ${describe(e)}; retrying (${attempt}/${attempts - 1})`);
+      await sleep(500 * 2 ** (attempt - 1));
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 if (!subdomain) fail("no subdomain: pass it as the first argument or set PUTER_SUBDOMAIN");
@@ -140,15 +166,27 @@ try {
     .filter((p) => p.startsWith(prefix) && !wanted.has(p.slice(prefix.length)));
 
   // 2. upload ------------------------------------------------------------------
+  // subfolders first, so parallel writes don't race to create them
+  const subdirs = [...new Set(files.map((f) => f.rel.split("/").slice(0, -1).join("/")).filter(Boolean))];
+  for (const dir of subdirs) {
+    try {
+      await puter.fs.mkdir(`${remoteDir}/${dir}`, { createMissingParents: true, dedupeName: false });
+    } catch (e) {
+      if (!/exist/i.test(describe(e))) throw e;
+    }
+  }
+
   let done = 0;
-  await mapWithConcurrency(files, 4, async (f) => {
+  await mapWithConcurrency(files, 3, async (f) => {
     const bytes = readFileSync(f.abs);
-    const file = new File([bytes], basename(f.rel), {
-      type: MIME[extname(f.rel).toLowerCase()] || "application/octet-stream",
-    });
-    await puter.fs.write(`${remoteDir}/${f.rel}`, file, {
-      overwrite: true,
-      createMissingParents: true,
+    await withRetries(f.rel, () => {
+      const file = new File([bytes], basename(f.rel), {
+        type: MIME[extname(f.rel).toLowerCase()] || "application/octet-stream",
+      });
+      return puter.fs.write(`${remoteDir}/${f.rel}`, file, {
+        overwrite: true,
+        createMissingParents: true,
+      });
     });
     done += 1;
     if (done % 10 === 0 || done === files.length) console.log(`uploaded ${done}/${files.length}`);
