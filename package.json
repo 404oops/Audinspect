@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && puter site deploy dist"
+    "deploy": "npm run build && node scripts/deploy-puter.mjs"
   },
   "keywords": [],
   "author": "",
@@ -15,6 +15,7 @@
   "type": "commonjs",
   "devDependencies": {
     "@heyputer/cli": "^0.4.0",
+    "@heyputer/puter.js": "^2.6.5",
     "@vitejs/plugin-react": "^6.1.2",
     "autoprefixer": "^10.6.2",
     "postcss": "^8.5.32",

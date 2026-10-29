@@ -40,10 +40,14 @@ jobs:
           path: dist/
           if-no-files-found: error
 
-      # publishes dist/ to <PUTER_SUBDOMAIN>.puter.site when the secrets are
-      # set (PUTER_AUTH_TOKEN from `puter login`, PUTER_SUBDOMAIN of your choice)
+      # uploads dist/ to ~/Documents/Audinspect on the puter drive, serves it
+      # at <PUTER_SUBDOMAIN>.puter.site and creates/updates the puter app.
+      # needs the PUTER_AUTH_TOKEN and PUTER_SUBDOMAIN repository secrets;
+      # PUTER_APP_NAME / PUTER_APP_DIR are optional overrides.
       - name: Deploy to Puter
         if: github.event_name == 'push' && env.PUTER_AUTH_TOKEN != '' && env.PUTER_SUBDOMAIN != ''
         env:
           CI: "true"
-        run: npx puter site deploy dist "$PUTER_SUBDOMAIN"
+          PUTER_APP_NAME: ${{ vars.PUTER_APP_NAME }}
+          PUTER_APP_DIR: ${{ vars.PUTER_APP_DIR }}
+        run: node scripts/deploy-puter.mjs

@@ -75,16 +75,24 @@ npm run build
 
 ## Publishing on Puter
 
-1. Deploy the `dist/` folder to a `*.puter.site` subdomain, either from the
-   Puter desktop (upload the folder, right-click → *Publish as Website*) or
-   with the CLI: `npm run deploy -- <subdomain>` (runs `puter site deploy dist <subdomain>`; `puter login` first, or set `PUTER_AUTH_TOKEN`).
-2. In the [Dev Center](https://puter.com/app/dev-center), create an app whose
-   index URL is that site, and add the extensions from
-   `src/utils/audio-extensions.json` as file type associations so audio files
-   offer Audinspect under *Open With…*. Use `resources/icon.png` as the icon.
+```bash
+npm run deploy -- <subdomain>
+```
 
-The GitHub workflow builds every push and, when the `PUTER_AUTH_TOKEN` and
-`PUTER_SUBDOMAIN` secrets are set, deploys the build to that subdomain.
+`scripts/deploy-puter.mjs` does the whole thing through the puter.js SDK:
+
+1. uploads `dist/` to `~/Documents/Audinspect` on your Puter drive and removes files left over from older builds,
+2. serves that folder at `https://<subdomain>.puter.site` (creating the site or re-pointing it),
+3. creates the Puter **app** `audinspect` (or updates it) with that site as its index URL, `resources/icon.png` as the icon and every extension from `src/utils/audio-extensions.json` as a file type association, so audio files offer Audinspect under *Open With…*.
+
+Without `PUTER_AUTH_TOKEN` in the environment it opens the browser to sign in.
+`PUTER_APP_NAME` and `PUTER_APP_DIR` override the app name (names are global on
+Puter) and the drive folder. `--dry-run` lists what would be uploaded.
+
+The GitHub workflow runs the same script on every push to this branch when the
+`PUTER_AUTH_TOKEN` and `PUTER_SUBDOMAIN` repository secrets are set; the
+optional `PUTER_APP_NAME` and `PUTER_APP_DIR` repository *variables* are passed
+through.
 
 ## License
 
