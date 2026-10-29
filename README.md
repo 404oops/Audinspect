@@ -81,8 +81,8 @@ npm run deploy -- <subdomain>
 
 `scripts/deploy-puter.mjs` does the whole thing through the puter.js SDK:
 
-1. uploads `dist/` to `~/Documents/Audinspect` on your Puter drive and removes files left over from older builds,
-2. serves that folder at `https://<subdomain>.puter.site` (creating the site or re-pointing it),
+1. uploads `dist/` to a new `~/Documents/Audinspect/v<version>-<timestamp>/` folder on your Puter drive,
+2. serves that folder at `https://<subdomain>.puter.site` (creating the site or re-pointing it) and then removes the previous release folders,
 3. creates the Puter **app** `audinspect` (or updates it) with that site as its index URL, `resources/icon.png` as the icon and every extension from `src/utils/audio-extensions.json` as a file type association, so audio files offer Audinspect under *Open With…*.
 
 Without `PUTER_AUTH_TOKEN` in the environment it opens the browser to sign in.

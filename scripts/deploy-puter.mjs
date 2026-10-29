@@ -1,10 +1,15 @@
 #!/usr/bin/env node
 // publishes the build as a puter *app*:
-//   1. uploads dist/ to a folder on the puter drive (default ~/Documents/Audinspect),
-//      removing files from older builds
-//   2. serves that folder at <subdomain>.puter.site (created or re-pointed)
+//   1. uploads dist/ to a new release folder on the puter drive
+//      (~/Documents/Audinspect/v<version>-<timestamp>/ by default)
+//   2. serves that folder at <subdomain>.puter.site (created or re-pointed),
+//      then removes the previous release folders
 //   3. creates or updates the puter app that opens it, with the audio
 //      extensions as file type associations
+//
+// a fresh folder per release keeps the switch atomic (the site only moves
+// once every file is up) and avoids a puter quirk where a directory made by
+// /mkdir is not accepted as the parent of uploaded files.
 //
 // usage: node scripts/deploy-puter.mjs [subdomain] [--dry-run]
 // env:   PUTER_AUTH_TOKEN (or a browser sign-in is opened), PUTER_SUBDOMAIN,
@@ -117,8 +122,15 @@ try {
 if (!files.some((f) => f.rel === "index.html")) fail("dist/index.html not found; run `npm run build` first");
 
 const indexURL = `https://${subdomain}.puter.site`;
+const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*$/, "");
+const releaseName = `v${pkg.version}-${stamp}`;
+const releaseDir = `${remoteDir}/${releaseName}`;
+const isReleaseName = (name) => /^v\d+\.\d+\.\d+-\d{8}T\d{6}$/.test(name);
+// what dist/ puts at its top level; leftovers of these at the folder root
+// come from older versions of this script and are swept
+const DIST_ROOT_NAMES = new Set(["assets", "index.html", "icon.png"]);
 const totalBytes = files.reduce((a, f) => a + f.size, 0);
-console.log(`${files.length} files (${(totalBytes / 1024 / 1024).toFixed(1)} MB) → ${remoteDir} → ${indexURL} → app "${appName}"`);
+console.log(`${files.length} files (${(totalBytes / 1024 / 1024).toFixed(1)} MB) → ${releaseDir} → ${indexURL} → app "${appName}"`);
 
 if (dryRun) {
   files.forEach((f) => console.log(`  ${f.rel}`));
@@ -140,42 +152,9 @@ try {
   const me = await puter.auth.getUser();
   console.log(`signed in as ${me.username}`);
 
-  // 1. the folder on the drive -------------------------------------------------
-  try {
-    await puter.fs.mkdir(remoteDir, { createMissingParents: true, dedupeName: false });
-    console.log(`created ${remoteDir}`);
-  } catch (e) {
-    // already there is fine
-    if (!/exist/i.test(describe(e))) throw e;
-  }
-  const dirStat = await puter.fs.stat(remoteDir);
-  if (!dirStat.is_dir && !dirStat.isDir) fail(`${remoteDir} is not a directory`);
-
-  // files from previous builds (hashed asset names change every build)
-  let existing = [];
-  try {
-    const listed = await puter.fs.readdir(remoteDir, { recursive: true, depth: 10 });
-    existing = (Array.isArray(listed) ? listed : listed.items || []).filter((it) => !(it.is_dir || it.isDir));
-  } catch (e) {
-    console.warn(`could not list ${remoteDir}: ${describe(e)}`);
-  }
-  const prefix = `${dirStat.path.replace(/\/+$/, "")}/`;
-  const wanted = new Set(files.map((f) => f.rel));
-  const stale = existing
-    .map((it) => it.path)
-    .filter((p) => p.startsWith(prefix) && !wanted.has(p.slice(prefix.length)));
-
-  // 2. upload ------------------------------------------------------------------
-  // subfolders first, so parallel writes don't race to create them
-  const subdirs = [...new Set(files.map((f) => f.rel.split("/").slice(0, -1).join("/")).filter(Boolean))];
-  for (const dir of subdirs) {
-    try {
-      await puter.fs.mkdir(`${remoteDir}/${dir}`, { createMissingParents: true, dedupeName: false });
-    } catch (e) {
-      if (!/exist/i.test(describe(e))) throw e;
-    }
-  }
-
+  // 1. upload into a fresh release folder ---------------------------------------
+  // the folders are created by the upload itself (createMissingParents), see
+  // the note at the top
   let done = 0;
   await mapWithConcurrency(files, 3, async (f) => {
     const bytes = readFileSync(f.abs);
@@ -183,7 +162,7 @@ try {
       const file = new File([bytes], basename(f.rel), {
         type: MIME[extname(f.rel).toLowerCase()] || "application/octet-stream",
       });
-      return puter.fs.write(`${remoteDir}/${f.rel}`, file, {
+      return puter.fs.write(`${releaseDir}/${f.rel}`, file, {
         overwrite: true,
         createMissingParents: true,
       });
@@ -191,13 +170,10 @@ try {
     done += 1;
     if (done % 10 === 0 || done === files.length) console.log(`uploaded ${done}/${files.length}`);
   });
+  const releaseStat = await puter.fs.stat(releaseDir);
+  if (!(releaseStat.is_dir || releaseStat.isDir)) fail(`${releaseDir} did not end up a directory`);
 
-  if (stale.length) {
-    await puter.fs.delete(stale, { recursive: false });
-    console.log(`removed ${stale.length} file(s) from older builds`);
-  }
-
-  // 3. the site -------------------------------------------------------------------
+  // 2. the site -------------------------------------------------------------------
   let site = null;
   try {
     site = await puter.hosting.get(subdomain);
@@ -205,14 +181,30 @@ try {
     site = null;
   }
   if (site) {
-    await puter.hosting.update(subdomain, remoteDir);
-    console.log(`site ${indexURL} now serves ${remoteDir}`);
+    await puter.hosting.update(subdomain, releaseDir);
+    console.log(`site ${indexURL} now serves ${releaseDir}`);
   } else {
-    await puter.hosting.create(subdomain, remoteDir);
-    console.log(`site ${indexURL} created, serving ${remoteDir}`);
+    await puter.hosting.create(subdomain, releaseDir);
+    console.log(`site ${indexURL} created, serving ${releaseDir}`);
   }
 
-  // 4. the app ------------------------------------------------------------------
+  // older releases (and leftovers of the flat layout) are no longer served
+  try {
+    const listed = await puter.fs.readdir(remoteDir);
+    const entries = Array.isArray(listed) ? listed : listed.items || [];
+    const stale = entries
+      .filter((it) => it.name !== releaseName)
+      .filter((it) => ((it.is_dir || it.isDir) && isReleaseName(it.name)) || DIST_ROOT_NAMES.has(it.name))
+      .map((it) => it.path);
+    if (stale.length) {
+      await puter.fs.delete(stale, { recursive: true });
+      console.log(`removed ${stale.length} older release(s)`);
+    }
+  } catch (e) {
+    console.warn(`could not clean up ${remoteDir}: ${describe(e)}`);
+  }
+
+  // 3. the app ------------------------------------------------------------------
   const icon = `data:image/png;base64,${readFileSync(join(root, "resources/icon.png")).toString("base64")}`;
   const attributes = {
     indexURL,
@@ -244,7 +236,8 @@ try {
   }
 
   console.log(`✔ deployed v${pkg.version}`);
-  console.log(`  site: ${indexURL}`);
+  console.log(`  files: ${releaseDir}`);
+  console.log(`  site:  ${indexURL}`);
   console.log(`  app:  https://puter.com/app/${appName}`);
   process.exit(0);
 } catch (e) {
