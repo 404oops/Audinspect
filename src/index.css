@@ -1,4 +1,7 @@
-@import url("https://fonts.googleapis.com/css2?family=Exo+2:ital,wght@0,100..900;1,100..900&display=swap");
+/* fonts ship with the app so they look the same offline and on every os */
+@import "@fontsource-variable/exo-2";
+@import "@fontsource-variable/exo-2/wght-italic.css";
+@import "@fontsource-variable/jetbrains-mono";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -16,7 +19,7 @@
 }
 
 body {
-  font-family: "Exo 2", sans-serif;
+  font-family: "Exo 2 Variable", "Exo 2", sans-serif;
   margin: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

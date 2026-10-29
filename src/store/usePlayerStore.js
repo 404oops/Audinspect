@@ -34,7 +34,7 @@ try {
 // playback speed always resets to 1x on startup (not persisted)
 const initialPlaybackSpeed = 1;
 
-let initialWavesurferTheme = "classic";
+let initialWavesurferTheme = "default";
 try {
   if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
     const savedTheme = localStorage.getItem("wavesurferTheme");
@@ -45,8 +45,6 @@ try {
       initialWavesurferTheme = "default";
     } else if (savedTheme === "minimal") {
       initialWavesurferTheme = "sleek";
-    } else if (savedTheme === "classic") {
-      initialWavesurferTheme = "classic";
     }
   }
 } catch (e) { }
@@ -86,7 +84,7 @@ try {
   if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
     const savedPlayOnSeek = localStorage.getItem("playOnSeekWhenPaused");
     if (savedPlayOnSeek !== null) {
-      initialPlayOnSeekWhenPaused = savedPlayOnSeek;
+      initialPlayOnSeekWhenPaused = savedPlayOnSeek === "true";
     }
   }
 } catch (e) { }

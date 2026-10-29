@@ -6,9 +6,24 @@ export default {
         "pure-black": "#000000",
         "international-blue": "#0050FF",
       },
+      // family names with spaces must be quoted or the whole declaration is
+      // invalid css ("Exo 2" unquoted parses as the identifier Exo plus 2)
       fontFamily: {
-        sans: ["Exo 2", "sans-serif"],
-        mono: ["JetBrains Mono", "monospace"],
+        sans: ['"Exo 2 Variable"', '"Exo 2"', "sans-serif"],
+        mono: [
+          '"JetBrains Mono Variable"',
+          '"JetBrains Mono"',
+          "ui-monospace",
+          "Menlo",
+          "Consolas",
+          "monospace",
+        ],
+      },
+      // text-12 / text-14 are used throughout but were never defined, so they
+      // silently rendered at the 16px default
+      fontSize: {
+        12: ["12px", { lineHeight: "16px" }],
+        14: ["14px", { lineHeight: "20px" }],
       },
       spacing: {
         4: "4px",

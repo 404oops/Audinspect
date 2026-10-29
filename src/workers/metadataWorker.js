@@ -40,44 +40,50 @@ function normalizeString(v) {
   return typeof v === "string" && v ? v : null;
 }
 
+// one bulkGet for all paths instead of a get per item
+async function loadExistingRows(paths) {
+  try {
+    const rows = await db.table("tracks").bulkGet(paths);
+    return Array.isArray(rows) ? rows : [];
+  } catch (_e) {
+    return [];
+  }
+}
+
+function keepExisting(existing, key, normalize) {
+  return existing ? normalize(existing[key]) : null;
+}
+
 async function upsertFromMetadata(items) {
   if (!Array.isArray(items) || !items.length) return;
   const now = Date.now();
-  const rows = [];
+  const valid = items.filter((item) => item && item.path);
+  if (!valid.length) return;
+  const paths = valid.map((item) => String(item.path));
+  const existingRows = await loadExistingRows(paths);
 
-  for (const item of items) {
-    if (!item || !item.path) continue;
-    const path = String(item.path);
-    try {
-      const existing = await db.table("tracks").get(path);
-      rows.push({
-        path,
-        size:
-          normalizeNumber(item.size) ??
-          (existing && normalizeNumber(existing.size)),
-        mtimeMs:
-          normalizeNumber(item.mtimeMs) ??
-          (existing && normalizeNumber(existing.mtimeMs)),
-        mtimeIso:
-          normalizeString(item.mtimeIso) ??
-          (existing && normalizeString(existing.mtimeIso)),
-        type:
-          normalizeString(item.type) ??
-          (existing && normalizeString(existing.type)),
-        duration:
-          existing && normalizeNumber(existing.duration) != null
-            ? normalizeNumber(existing.duration)
-            : null,
-        createdAt:
-          existing && normalizeNumber(existing.createdAt) != null
-            ? normalizeNumber(existing.createdAt)
-            : now,
-        updatedAt: now,
-      });
-    } catch (_e) {}
-  }
+  const rows = valid.map((item, i) => {
+    const existing = existingRows[i] || null;
+    return {
+      path: paths[i],
+      size:
+        normalizeNumber(item.size) ??
+        keepExisting(existing, "size", normalizeNumber),
+      mtimeMs:
+        normalizeNumber(item.mtimeMs) ??
+        keepExisting(existing, "mtimeMs", normalizeNumber),
+      mtimeIso:
+        normalizeString(item.mtimeIso) ??
+        keepExisting(existing, "mtimeIso", normalizeString),
+      type:
+        normalizeString(item.type) ??
+        keepExisting(existing, "type", normalizeString),
+      duration: keepExisting(existing, "duration", normalizeNumber),
+      createdAt: keepExisting(existing, "createdAt", normalizeNumber) ?? now,
+      updatedAt: now,
+    };
+  });
 
-  if (!rows.length) return;
   try {
     await db.table("tracks").bulkPut(rows);
   } catch (_e) {}
@@ -86,41 +92,37 @@ async function upsertFromMetadata(items) {
 async function upsertFromProbeResults(items) {
   if (!Array.isArray(items) || !items.length) return;
   const now = Date.now();
-  const rows = [];
+  const valid = items.filter((item) => item && item.path);
+  if (!valid.length) return;
+  const paths = valid.map((item) => String(item.path));
+  const existingRows = await loadExistingRows(paths);
 
-  for (const item of items) {
-    if (!item || !item.path) continue;
-    const path = String(item.path);
-    try {
-      const existing = await db.table("tracks").get(path);
-      const size = normalizeNumber(item.size);
-      const mtimeMs = normalizeNumber(item.mtimeMs);
-      const type = normalizeString(item.type);
-      const duration = normalizeNumber(item.duration);
+  const rows = valid.map((item, i) => {
+    const existing = existingRows[i] || null;
+    const duration = normalizeNumber(item.duration);
+    return {
+      path: paths[i],
+      size:
+        normalizeNumber(item.size) ??
+        keepExisting(existing, "size", normalizeNumber),
+      mtimeMs:
+        normalizeNumber(item.mtimeMs) ??
+        keepExisting(existing, "mtimeMs", normalizeNumber),
+      mtimeIso:
+        normalizeString(item.mtimeIso) ??
+        keepExisting(existing, "mtimeIso", normalizeString),
+      type:
+        normalizeString(item.type) ??
+        keepExisting(existing, "type", normalizeString),
+      duration:
+        duration != null
+          ? duration
+          : keepExisting(existing, "duration", normalizeNumber),
+      createdAt: keepExisting(existing, "createdAt", normalizeNumber) ?? now,
+      updatedAt: now,
+    };
+  });
 
-      rows.push({
-        path,
-        size: size ?? (existing && normalizeNumber(existing.size)),
-        mtimeMs:
-          mtimeMs ?? (existing && normalizeNumber(existing.mtimeMs)),
-        mtimeIso:
-          normalizeString(item.mtimeIso) ??
-          (existing && normalizeString(existing.mtimeIso)),
-        type: type ?? (existing && normalizeString(existing.type)),
-        duration:
-          duration != null
-            ? duration
-            : existing && normalizeNumber(existing.duration),
-        createdAt:
-          existing && normalizeNumber(existing.createdAt) != null
-            ? normalizeNumber(existing.createdAt)
-            : now,
-        updatedAt: now,
-      });
-    } catch (_e) {}
-  }
-
-  if (!rows.length) return;
   try {
     await db.table("tracks").bulkPut(rows);
   } catch (_e) {}

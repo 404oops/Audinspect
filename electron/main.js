@@ -8,41 +8,83 @@ const {
   nativeImage,
   shell,
 } = require("electron");
-const { webUtils } = require("electron");
 const path = require("node:path");
 const fs = require("fs").promises;
 const { spawn } = require("child_process");
-const { Level } = require("level");
 const chokidar = require("chokidar");
+const ffmpeg = require("./ffmpeg-downloader");
+const cache = require("./cache-manager");
+const settingsStore = require("./settings-store");
 const {
-  getFFmpegPath,
-  getFFprobePath,
-  ensureBinariesExist,
-  areBinariesAvailable,
-} = require("./ffmpeg-downloader");
+  AUDIO_EXTENSIONS,
+  AUDIO_EXTENSION_LIST,
+  isAudioPath,
+} = require("./audio-extensions");
 
-const AUDIO_EXTENSIONS = new Set([
-  ".mp3",
-  ".wav",
-  ".flac",
-  ".m4a",
-  ".aac",
-  ".ogg",
-  ".oga",
-  ".opus",
-  ".aiff",
-  ".aif",
-  ".wma",
-  ".ac3",
-  ".dts",
-  ".amr",
-  ".ape",
-  ".wv",
-  ".spx",
-  ".dsf",
-  ".dff",
-]);
+// ---------------------------------------------------------------------------
+// single instance + files opened via the os (double-click / "open with" /
+// command line). paths are queued until the renderer asks for them.
+// ---------------------------------------------------------------------------
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
 
+let pendingOpenPaths = [];
+let rendererAcceptsOpens = null; // webContents that called files:getPendingOpen
+
+function queueOpenPaths(paths) {
+  const list = (paths || []).filter((p) => typeof p === "string" && p.trim());
+  if (!list.length) return;
+  if (rendererAcceptsOpens && !rendererAcceptsOpens.isDestroyed()) {
+    try {
+      rendererAcceptsOpens.send("files:open", list);
+      return;
+    } catch (e) {}
+  }
+  pendingOpenPaths.push(...list);
+}
+
+// argv contains the electron binary, (in dev) the app dir, and any flags;
+// keep only existing audio files / folders
+function extractOpenPathsFromArgv(argv, cwd) {
+  const out = [];
+  for (const raw of (argv || []).slice(1)) {
+    if (!raw || raw.startsWith("-")) continue;
+    const p = path.isAbsolute(raw) ? raw : path.resolve(cwd || process.cwd(), raw);
+    try {
+      const st = require("fs").statSync(p);
+      if (st.isFile() && isAudioPath(p)) out.push(p);
+      else if (st.isDirectory() && app.isPackaged) out.push(p);
+    } catch (e) {}
+  }
+  return out;
+}
+
+app.on("open-file", (event, filePath) => {
+  event.preventDefault();
+  queueOpenPaths([filePath]);
+  focusMainWindow();
+});
+
+app.on("second-instance", (_event, argv, workingDirectory) => {
+  queueOpenPaths(extractOpenPathsFromArgv(argv, workingDirectory));
+  focusMainWindow();
+});
+
+function focusMainWindow() {
+  const win = BrowserWindow.getAllWindows().find((w) => w && !w.isDestroyed());
+  if (!win) return;
+  try {
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  } catch (e) {}
+}
+
+// ---------------------------------------------------------------------------
+// folder watching
+// ---------------------------------------------------------------------------
 let folderWatcher = null;
 let folderWatcherPath = null;
 let folderWatcherWebContents = null;
@@ -74,6 +116,23 @@ function stopFolderWatcher() {
   }
 }
 
+// runs fn over items with at most `limit` in flight, preserving result order
+function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  const run = async () => {
+    const i = next++;
+    if (i >= items.length) return;
+    results[i] = await fn(items[i], i);
+    return run();
+  };
+  const workers = Array.from(
+    { length: Math.max(1, Math.min(limit, items.length)) },
+    run
+  );
+  return Promise.all(workers).then(() => results);
+}
+
 function scheduleFolderDeltaFlush() {
   if (!folderWatcherWebContents) return;
   if (folderDeltaTimeout) return;
@@ -97,6 +156,18 @@ function scheduleFolderDeltaFlush() {
   }, 200);
 }
 
+async function statMetadata(p) {
+  const st = await fs.stat(p);
+  const ext = path.extname(p).toLowerCase();
+  return {
+    path: p,
+    size: typeof st.size === "number" ? st.size : null,
+    mtimeMs: typeof st.mtimeMs === "number" ? st.mtimeMs : null,
+    mtimeIso: st.mtime.toISOString(),
+    type: ext || null,
+  };
+}
+
 function scheduleMetadataFlush() {
   if (!folderWatcherWebContents) return;
   if (metadataTimeout) return;
@@ -106,21 +177,9 @@ function scheduleMetadataFlush() {
     metadataTimeout = null;
     if (!folderWatcherWebContents) return;
     if (!paths.length) return;
-    const items = [];
-    for (const p of paths) {
-      try {
-        const st = await fs.stat(p);
-        const ext = path.extname(p).toLowerCase();
-        const meta = {
-          path: p,
-          size: typeof st.size === "number" ? st.size : null,
-          mtimeMs: typeof st.mtimeMs === "number" ? st.mtimeMs : null,
-          mtimeIso: st.mtime.toISOString(),
-          type: ext || null,
-        };
-        items.push(meta);
-      } catch (e) {}
-    }
+    const items = (
+      await Promise.all(paths.map((p) => statMetadata(p).catch(() => null)))
+    ).filter(Boolean);
     if (!items.length) return;
     if (!folderWatcherWebContents) return;
     try {
@@ -132,27 +191,31 @@ function scheduleMetadataFlush() {
 }
 
 async function collectAudioFiles(dir) {
-  let results = [];
   const entries = await fs.readdir(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      const nested = await collectAudioFiles(fullPath);
-      results = results.concat(nested);
-    } else if (entry.isFile()) {
-      const ext = path.extname(entry.name).toLowerCase();
-      if (AUDIO_EXTENSIONS.has(ext)) {
-        results.push(fullPath);
+  const parts = await Promise.all(
+    entries.map(async (entry) => {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        // an unreadable subfolder shouldn't hide the rest of the tree
+        return collectAudioFiles(fullPath).catch(() => []);
       }
-    }
-  }
-  return results;
+      if (entry.isFile() && isAudioPath(entry.name)) return [fullPath];
+      return [];
+    })
+  );
+  return parts.flat();
 }
 
+// ---------------------------------------------------------------------------
+// legacy leveldb metadata export (migrated into indexeddb by the renderer)
+// ---------------------------------------------------------------------------
 let legacyMetadataDb = null;
 
 function getLegacyMetadataDb() {
   if (legacyMetadataDb) return legacyMetadataDb;
+  // native module, only needed for the one-time leveldb -> indexeddb
+  // migration; required lazily so a missing prebuild can't take the app down
+  const { Level } = require("level");
   const userDataDir = app.getPath("userData");
   const dbPath = path.join(userDataDir, "audinspect-metadata");
   legacyMetadataDb = new Level(dbPath, { valueEncoding: "json" });
@@ -169,7 +232,8 @@ async function exportLegacyMetadataRecords() {
 
   const records = [];
   try {
-    for await (const [key, value] of db.iterator()) {
+    const entries = await db.iterator().all();
+    for (const [key, value] of entries) {
       if (!value || typeof value !== "object") continue;
       const size =
         typeof value.size === "number" && Number.isFinite(value.size)
@@ -222,6 +286,9 @@ async function exportLegacyMetadataRecords() {
   return records;
 }
 
+// ---------------------------------------------------------------------------
+// window
+// ---------------------------------------------------------------------------
 function createWindow() {
   const isMac = process.platform === "darwin";
 
@@ -262,20 +329,9 @@ function createWindow() {
   return mainWindow;
 }
 
-async function openFolderAndSend(win) {
-  const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
-  if (result.canceled || !result.filePaths || result.filePaths.length === 0)
-    return;
-  const folder = result.filePaths[0];
-  try {
-    const files = await collectAudioFiles(folder);
-    win.webContents.send("files:loaded", files);
-  } catch (err) {
-    console.error("Failed to collect audio files from folder:", err);
-    win.webContents.send("files:loaded", []);
-  }
-}
-
+// ---------------------------------------------------------------------------
+// dialogs + file system
+// ---------------------------------------------------------------------------
 ipcMain.handle("dialog:openFolder", async () => {
   const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
   if (result.canceled) return null;
@@ -286,10 +342,8 @@ ipcMain.handle("dialog:openFiles", async () => {
   const result = await dialog.showOpenDialog({
     properties: ["openFile", "multiSelections"],
     filters: [
-      {
-        name: "Audio Files",
-        extensions: ["mp3", "wav", "flac", "m4a", "aac", "ogg"],
-      },
+      { name: "Audio Files", extensions: AUDIO_EXTENSION_LIST },
+      { name: "All Files", extensions: ["*"] },
     ],
   });
   if (result.canceled || !result.filePaths || result.filePaths.length === 0)
@@ -342,8 +396,7 @@ ipcMain.handle("folder:watch", async (event, folderPath) => {
     },
   });
   const handleAdd = (p) => {
-    const ext = path.extname(p).toLowerCase();
-    if (!AUDIO_EXTENSIONS.has(ext)) return;
+    if (!isAudioPath(p)) return;
     folderDeltaAdded.add(p);
     folderDeltaRemoved.delete(p);
     scheduleFolderDeltaFlush();
@@ -351,15 +404,13 @@ ipcMain.handle("folder:watch", async (event, folderPath) => {
     scheduleMetadataFlush();
   };
   const handleUnlink = (p) => {
-    const ext = path.extname(p).toLowerCase();
-    if (!AUDIO_EXTENSIONS.has(ext)) return;
+    if (!isAudioPath(p)) return;
     folderDeltaRemoved.add(p);
     folderDeltaAdded.delete(p);
     scheduleFolderDeltaFlush();
   };
   const handleChange = (p) => {
-    const ext = path.extname(p).toLowerCase();
-    if (!AUDIO_EXTENSIONS.has(ext)) return;
+    if (!isAudioPath(p)) return;
     metadataPendingPaths.add(p);
     scheduleMetadataFlush();
   };
@@ -377,87 +428,74 @@ ipcMain.handle("folder:unwatch", async () => {
   return null;
 });
 
+// fallback for dropped files that have no path on disk (e.g. dragged out of
+// a browser). the bytes are copied into the capped imports cache.
 ipcMain.handle("file:processFromBytes", async (_event, fileName, fileBytes) => {
   try {
-    const ext = path.extname(fileName).toLowerCase();
-    if (!AUDIO_EXTENSIONS.has(ext)) {
-      console.warn(`Unsupported file extension: ${ext}`);
-      return null;
+    if (!isAudioPath(fileName)) {
+      return { path: null, error: "unsupported file type" };
     }
-
-    const tempDir = require("os").tmpdir();
-    const tempPath = path.join(tempDir, `audinspect_${Date.now()}_${fileName}`);
-
-    await fs.writeFile(tempPath, Buffer.from(fileBytes));
-
-    const st = await fs.stat(tempPath);
-    if (st.isFile()) {
-      return tempPath;
-    }
-
-    await fs.unlink(tempPath).catch(() => {});
-    return null;
+    return await cache.writeImport(fileName, fileBytes);
   } catch (err) {
     console.error("Failed to process file from bytes:", err);
-    return null;
+    return { path: null, error: err.message };
   }
 });
 
-ipcMain.handle("file:getPath", async (_event, fileRef) => {
-  try {
-    const filePath = webUtils.getPathForFile(fileRef);
-    return filePath;
-  } catch (err) {
-    console.error("Failed to get file path:", err);
-    return null;
-  }
+// expands a mix of file and folder paths into the audio files they contain.
+// `unsupported` counts the top-level files that were skipped.
+ipcMain.handle("files:expandPaths", async (_event, paths) => {
+  const input = Array.isArray(paths)
+    ? paths.filter((p) => typeof p === "string" && p.trim()).map((p) => p.trim())
+    : [];
+  const results = await Promise.all(
+    input.map(async (p) => {
+      try {
+        const st = await fs.stat(p);
+        if (st.isDirectory()) {
+          return { files: await collectAudioFiles(p), folder: true };
+        }
+        if (st.isFile()) {
+          return isAudioPath(p) ? { files: [p] } : { unsupported: true };
+        }
+        return {};
+      } catch (e) {
+        console.warn(`Failed to stat path ${p}:`, e);
+        return { unsupported: true };
+      }
+    })
+  );
+  const files = [];
+  let unsupported = 0;
+  let folders = 0;
+  results.forEach((r) => {
+    if (r.files) files.push(...r.files);
+    if (r.unsupported) unsupported += 1;
+    if (r.folder) folders += 1;
+  });
+  return { files: [...new Set(files)], unsupported, folders };
 });
 
 ipcMain.handle("files:scanPaths", async (_event, paths) => {
   if (!paths || !Array.isArray(paths)) return [];
   const normalizedPaths = paths
-    .filter((raw) => {
-      if (!raw || typeof raw !== "string") {
-        console.warn(`Invalid path value received in files:scanPaths:`, raw);
-        return false;
-      }
-      const trimmed = raw.trim();
-      if (!trimmed) {
-        console.warn(`Empty/whitespace-only path received in files:scanPaths`);
-        return false;
-      }
-      return true;
-    })
+    .filter((raw) => typeof raw === "string" && raw.trim())
     .map((p) => p.trim());
+  if (!normalizedPaths.length) return [];
 
-  if (!normalizedPaths.length) {
-    return [];
-  }
-
-  let allResults = [];
-  try {
-    for (const p of normalizedPaths) {
+  const parts = await Promise.all(
+    normalizedPaths.map(async (p) => {
       try {
         const st = await fs.stat(p);
-        if (st.isDirectory()) {
-          const nested = await collectAudioFiles(p);
-          allResults = allResults.concat(nested);
-        } else if (st.isFile()) {
-          const ext = path.extname(p).toLowerCase();
-          if (AUDIO_EXTENSIONS.has(ext)) {
-            allResults.push(p);
-          }
-        }
+        if (st.isDirectory()) return collectAudioFiles(p);
+        return st.isFile() && isAudioPath(p) ? [p] : [];
       } catch (e) {
         console.warn(`Failed to stat path ${p}:`, e);
+        return [];
       }
-    }
-
-    return [...new Set(allResults)];
-  } catch (err) {
-    console.error("Error scanning paths:", err);
-    return [];
-  }
+    })
+  );
+  return [...new Set(parts.flat())];
 });
 
 ipcMain.handle("files:getMetadata", async (_event, paths) => {
@@ -467,25 +505,14 @@ ipcMain.handle("files:getMetadata", async (_event, paths) => {
   ];
   if (!uniquePaths.length) return [];
 
-  const results = [];
-  for (const p of uniquePaths) {
-    try {
-      const st = await fs.stat(p);
-      const ext = path.extname(p).toLowerCase();
-      results.push({
-        path: p,
-        size: st.size,
-        mtimeMs: st.mtimeMs,
-        mtimeIso: st.mtime.toISOString(),
-        type: ext || null,
-      });
-    } catch (e) {
-      console.warn("Failed to stat for metadata:", p, e);
-      results.push({ path: p });
-    }
-  }
-
-  return results;
+  return Promise.all(
+    uniquePaths.map((p) =>
+      statMetadata(p).catch((e) => {
+        console.warn("Failed to stat for metadata:", p, e);
+        return { path: p };
+      })
+    )
+  );
 });
 
 ipcMain.handle("files:list", async (_event, folderPath) => {
@@ -535,32 +562,27 @@ ipcMain.handle("files:traverse", async (_event, folderPath) => {
   if (!folderPath) return null;
   async function build(dir) {
     const entries = await fs.readdir(dir, { withFileTypes: true });
-    const result = [];
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        const children = await build(fullPath);
-        result.push({
-          name: entry.name,
-          path: fullPath,
-          type: "directory",
-          children,
-        });
-      } else if (entry.isFile()) {
-        try {
-          const st = await fs.stat(fullPath);
-          result.push({
+    const nodes = await Promise.all(
+      entries.map(async (entry) => {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          return {
             name: entry.name,
             path: fullPath,
-            type: "file",
-            size: st.size,
-          });
-        } catch (e) {
-          result.push({ name: entry.name, path: fullPath, type: "file" });
+            type: "directory",
+            children: await build(fullPath),
+          };
         }
-      }
-    }
-    return result;
+        if (!entry.isFile()) return null;
+        try {
+          const st = await fs.stat(fullPath);
+          return { name: entry.name, path: fullPath, type: "file", size: st.size };
+        } catch (e) {
+          return { name: entry.name, path: fullPath, type: "file" };
+        }
+      })
+    );
+    return nodes.filter(Boolean);
   }
 
   try {
@@ -583,6 +605,17 @@ ipcMain.handle("file:read", async (_event, filePath) => {
   }
 });
 
+// files handed to us by the os (double-click, "open with", argv)
+ipcMain.handle("files:getPendingOpen", (event) => {
+  rendererAcceptsOpens = event.sender;
+  const list = pendingOpenPaths;
+  pendingOpenPaths = [];
+  return list;
+});
+
+// ---------------------------------------------------------------------------
+// window controls / shell
+// ---------------------------------------------------------------------------
 ipcMain.handle("window:minimize", (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (win) win.minimize();
@@ -615,44 +648,76 @@ ipcMain.handle("shell:openExternal", async (_event, url) => {
   await shell.openExternal(url);
 });
 
+ipcMain.handle("shell:showItemInFolder", async (_event, p) => {
+  if (!p || typeof p !== "string") return;
+  shell.showItemInFolder(p);
+});
+
+ipcMain.handle("app:getVersion", () => app.getVersion());
+
+// ---------------------------------------------------------------------------
+// settings (main-process side: binary paths, cache limit)
+// ---------------------------------------------------------------------------
+ipcMain.handle("settings:get", () => settingsStore.getSettings());
+
+ipcMain.handle("settings:set", async (_event, partial) => {
+  const before = settingsStore.getSettings();
+  const next = settingsStore.setSettings(partial);
+  if (
+    before.ffmpegPath !== next.ffmpegPath ||
+    before.ffprobePath !== next.ffprobePath
+  ) {
+    await ffmpeg.resolveBinaries({ force: true });
+  }
+  if (before.maxCacheMB !== next.maxCacheMB) {
+    await cache.enforceLimit();
+  }
+  return next;
+});
+
+// ---------------------------------------------------------------------------
+// ffmpeg / ffprobe
+// ---------------------------------------------------------------------------
 ipcMain.handle("file:decodeToWav", async (_event, filePath) => {
   if (!filePath) return null;
 
-  // check if binaries are available
-  if (!areBinariesAvailable()) {
+  const ffmpegPath = await ffmpeg.getFfmpegPath();
+  if (!ffmpegPath) {
     return {
       data: null,
-      error: "FFmpeg binaries not available. Please wait for download to complete.",
+      error: "ffmpeg is not available. set it up in settings > audio.",
       code: null,
       needsDownload: true,
     };
   }
 
-  const ffmpegPath = getFFmpegPath();
-  console.log("Using FFmpeg path:", ffmpegPath);
-
+  const startedAt = Date.now();
   return new Promise((resolve) => {
     try {
-      const args = ["-i", filePath, "-f", "wav", "-"];
-      console.log(`Spawning ffmpeg: ${ffmpegPath} ${args.join(" ")}`);
-
-      const ff = spawn(ffmpegPath, args, { stdio: ["ignore", "pipe", "pipe"] });
+      const args = ["-hide_banner", "-nostdin", "-i", filePath, "-f", "wav", "-"];
+      const ff = spawn(ffmpegPath, args, {
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+      });
       const chunks = [];
       ff.stdout.on("data", (c) => chunks.push(c));
       let errBuf = "";
       ff.stderr.on("data", (d) => {
-        errBuf += d.toString();
+        if (errBuf.length < 65536) errBuf += d.toString();
       });
 
       ff.on("close", (code) => {
         if (code === 0) {
           const out = Buffer.concat(chunks);
+          console.log(
+            `ffmpeg decoded ${path.basename(filePath)} (${(out.length / 1024 / 1024).toFixed(1)} MB) in ${Date.now() - startedAt} ms`
+          );
           resolve({ data: out, error: null, code: 0 });
         } else {
           console.error("ffmpeg failed:", code, errBuf);
           resolve({
             data: null,
-            error: `ffmpeg failed (code ${code}): ${errBuf}`,
+            error: `ffmpeg failed (code ${code}): ${errBuf.trim().split(/\r?\n/).pop() || ""}`,
             code,
           });
         }
@@ -677,90 +742,9 @@ ipcMain.handle("file:decodeToWav", async (_event, filePath) => {
   });
 });
 
-// ffprobe path is now provided by ffmpeg-downloader module
-
-function runFfprobeDuration(ffprobePath, filePath) {
-  return new Promise((resolve) => {
-    try {
-      const args = [
-        "-v",
-        "error",
-        "-show_entries",
-        "format=duration",
-        "-of",
-        "default=noprint_wrappers=1:nokey=1",
-        filePath,
-      ];
-
-      const ff = spawn(ffprobePath, args, {
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-      let out = "";
-      let errBuf = "";
-
-      ff.stdout.on("data", (c) => {
-        out += c.toString();
-      });
-      ff.stderr.on("data", (d) => {
-        errBuf += d.toString();
-      });
-
-      ff.on("close", (code) => {
-        if (code === 0) {
-          const text = (out || "").trim().split(/\r?\n/).pop();
-          const dur = parseFloat(text);
-          if (!Number.isFinite(dur) || dur <= 0) {
-            resolve({
-              duration: null,
-              error: `ffprobe returned invalid duration: ${text}`,
-              code: 0,
-            });
-          } else {
-            resolve({ duration: dur, error: null, code: 0 });
-          }
-        } else {
-          console.error("ffprobe failed:", code, errBuf);
-          resolve({
-            duration: null,
-            error: `ffprobe failed (code ${code}): ${errBuf}`,
-            code,
-          });
-        }
-      });
-
-      ff.on("error", (e) => {
-        console.error("ffprobe spawn error:", e);
-        resolve({
-          duration: null,
-          error: `ffprobe spawn error: ${e.message}`,
-          code: null,
-        });
-      });
-    } catch (e) {
-      console.error("Error running ffprobe:", e);
-      resolve({
-        duration: null,
-        error: `Error running ffprobe: ${e.message}`,
-        code: null,
-      });
-    }
-  });
-}
-
 ipcMain.handle("file:probeDuration", async (_event, filePath) => {
   if (!filePath) return null;
-
-  if (!areBinariesAvailable()) {
-    return {
-      duration: null,
-      error: "FFprobe binaries not available. Please wait for download to complete.",
-      code: null,
-      needsDownload: true,
-    };
-  }
-
-  const ffprobePath = getFFprobePath();
-  return runFfprobeDuration(ffprobePath, filePath);
+  return ffmpeg.probeDuration(filePath);
 });
 
 ipcMain.handle("files:probeDurations", async (event, paths) => {
@@ -770,15 +754,15 @@ ipcMain.handle("files:probeDurations", async (event, paths) => {
   ];
   if (!uniquePaths.length) return [];
 
-  if (!areBinariesAvailable()) {
-    console.warn("FFprobe binaries not available for batch probe");
+  if (!(await ffmpeg.getFfmpegPath()) && !(await ffmpeg.getFfprobePath())) {
+    console.warn("no ffmpeg/ffprobe available for batch probe");
     return [];
   }
 
-  const ffprobePath = getFFprobePath();
-
-  const results = [];
-  for (const p of uniquePaths) {
+  // a few probes in flight at once: faster than one by one, without
+  // spawning a process per file for a 2,000-track folder
+  const PROBE_CONCURRENCY = 4;
+  return mapWithConcurrency(uniquePaths, PROBE_CONCURRENCY, async (p) => {
     let size = null;
     let mtimeMs = null;
     let type = null;
@@ -790,85 +774,148 @@ ipcMain.handle("files:probeDurations", async (event, paths) => {
       type = ext || null;
     } catch (e) {}
 
-    const res = await runFfprobeDuration(ffprobePath, p);
-
-    results.push({ path: p, size, mtimeMs, type, ...res });
+    const res = await ffmpeg.probeDuration(p);
 
     try {
-      if (
-        res &&
-        typeof res.duration === "number" &&
-        Number.isFinite(res.duration) &&
-        res.duration > 0
-      ) {
-        event.sender.send("files:probeDurations:progress", {
-          path: p,
-          duration: res.duration,
-        });
-      } else if (res && res.error) {
-        event.sender.send("files:probeDurations:progress", {
-          path: p,
-          duration: null,
-          error: res.error,
-        });
+      if (!event.sender.isDestroyed()) {
+        if (
+          res &&
+          typeof res.duration === "number" &&
+          Number.isFinite(res.duration) &&
+          res.duration > 0
+        ) {
+          event.sender.send("files:probeDurations:progress", {
+            path: p,
+            duration: res.duration,
+          });
+        } else if (res && res.error) {
+          event.sender.send("files:probeDurations:progress", {
+            path: p,
+            duration: null,
+            error: res.error,
+          });
+        }
       }
     } catch (e) {}
-  }
 
-  return results;
+    return { path: p, size, mtimeMs, type, ...res };
+  });
 });
 
-// binary download handlers
 ipcMain.handle("binaries:status", async () => {
-  return {
-    available: areBinariesAvailable(),
-    ffmpegPath: areBinariesAvailable() ? getFFmpegPath() : null,
-    ffprobePath: areBinariesAvailable() ? getFFprobePath() : null,
-  };
+  try {
+    return await ffmpeg.getStatus();
+  } catch (e) {
+    console.warn("binaries:status failed:", e);
+    return { available: false, error: e.message };
+  }
+});
+
+ipcMain.handle("binaries:redetect", async () => {
+  await ffmpeg.resolveBinaries({ force: true });
+  return ffmpeg.getStatus();
+});
+
+ipcMain.handle("binaries:downloadSize", async () => {
+  return ffmpeg.getDownloadSize();
 });
 
 ipcMain.handle("binaries:download", async (event) => {
-  if (areBinariesAvailable()) {
-    return { success: true, alreadyAvailable: true };
-  }
-
   try {
-    const result = await ensureBinariesExist((binary, downloaded, total) => {
-      // send progress to renderer
+    const result = await ffmpeg.downloadFfmpeg((binary, downloaded, total) => {
       try {
+        if (event.sender.isDestroyed()) return;
         event.sender.send("binaries:downloadProgress", {
           binary,
           downloaded,
           total,
-          percent: Math.round((downloaded / total) * 100),
+          percent: total ? Math.round((downloaded / total) * 100) : 0,
         });
-      } catch (e) {
-        // sender may be destroyed
-      }
+      } catch (e) {}
     });
-
-    return { success: true, ...result };
+    return { success: true, ...result, status: await ffmpeg.getStatus() };
   } catch (e) {
-    console.error("Failed to download binaries:", e);
-    return { success: false, error: e.message };
+    console.error("Failed to download ffmpeg:", e);
+    return { success: false, error: e.message, code: e.code || null };
   }
 });
 
-app.whenReady().then(() => {
+ipcMain.handle("binaries:removeDownloaded", async () => {
+  const result = await ffmpeg.removeDownloaded();
+  return { ...result, status: await ffmpeg.getStatus() };
+});
+
+// lets the user point audinspect at an ffmpeg/ffprobe binary of their own
+ipcMain.handle("binaries:browse", async (event, kind) => {
+  if (kind !== "ffmpeg" && kind !== "ffprobe") return { ok: false };
+  const win = BrowserWindow.fromWebContents(event.sender);
+  const result = await dialog.showOpenDialog(win, {
+    title: `locate ${kind}`,
+    properties: ["openFile", "showHiddenFiles"],
+    ...(process.platform === "win32" && {
+      filters: [
+        { name: kind, extensions: ["exe"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    }),
+  });
+  if (result.canceled || !result.filePaths || !result.filePaths[0]) {
+    return { ok: false, canceled: true };
+  }
+  const chosen = result.filePaths[0];
+  const valid = await ffmpeg.validateBinary(chosen, kind);
+  if (!valid) {
+    return {
+      ok: false,
+      error: `${path.basename(chosen)} did not respond like ${kind} (ran it with -version)`,
+    };
+  }
+  settingsStore.setSettings({ [`${kind}Path`]: chosen });
+  await ffmpeg.resolveBinaries({ force: true });
+  return { ok: true, path: chosen, status: await ffmpeg.getStatus() };
+});
+
+ipcMain.handle("binaries:dismissPrompt", async (_event, dismissed) => {
+  settingsStore.setSettings({ binariesPromptDismissed: !!dismissed });
+  return null;
+});
+
+// ---------------------------------------------------------------------------
+// cache
+// ---------------------------------------------------------------------------
+ipcMain.handle("cache:info", async () => cache.getCacheInfo());
+
+ipcMain.handle("cache:clearImports", async () => {
+  const result = await cache.clearImports();
+  return { ...result, info: await cache.getCacheInfo() };
+});
+
+// ---------------------------------------------------------------------------
+// app lifecycle
+// ---------------------------------------------------------------------------
+app.whenReady().then(async () => {
   const mainWindow = createWindow();
+
+  // files passed on the command line at launch (windows / linux)
+  queueOpenPaths(extractOpenPathsFromArgv(process.argv, process.cwd()));
+
+  // housekeeping that must not delay the window
+  cache.cleanupLegacyTemp().catch(() => {});
+  cache.enforceLimit().catch(() => {});
+  ffmpeg.resolveBinaries().catch(() => {});
 
   const playbackState = { isPlaying: false };
 
-  const sendMediaCommand = (channel) => {
+  const sendToRenderer = (channel, ...args) => {
     try {
       const win = BrowserWindow.getAllWindows().find(
         (w) => w && !w.isDestroyed()
       );
       if (win) {
-        win.webContents.send(channel);
+        win.webContents.send(channel, ...args);
       }
     } catch (e) {
-      console.warn("Failed to send media command to renderer:", e);
+      console.warn(`Failed to send ${channel} to renderer:`, e);
     }
   };
 
@@ -908,17 +955,17 @@ app.whenReady().then(() => {
         {
           tooltip: "previous",
           icon: prevIcon,
-          click: () => sendMediaCommand("media:previous"),
+          click: () => sendToRenderer("media:previous"),
         },
         {
           tooltip: isPlaying ? "pause" : "play",
           icon: playPauseIcon,
-          click: () => sendMediaCommand("media:playPause"),
+          click: () => sendToRenderer("media:playPause"),
         },
         {
           tooltip: "next",
           icon: nextIcon,
-          click: () => sendMediaCommand("media:next"),
+          click: () => sendToRenderer("media:next"),
         },
       ]);
     } catch (e) {
@@ -941,13 +988,13 @@ app.whenReady().then(() => {
 
   try {
     globalShortcut.register("MediaPlayPause", () => {
-      sendMediaCommand("media:playPause");
+      sendToRenderer("media:playPause");
     });
     globalShortcut.register("MediaNextTrack", () => {
-      sendMediaCommand("media:next");
+      sendToRenderer("media:next");
     });
     globalShortcut.register("MediaPreviousTrack", () => {
-      sendMediaCommand("media:previous");
+      sendToRenderer("media:previous");
     });
   } catch (e) {
     console.warn("Failed to register media key shortcuts:", e);
@@ -963,6 +1010,12 @@ app.whenReady().then(() => {
             submenu: [
               { role: "about" },
               { type: "separator" },
+              {
+                label: "Settings…",
+                accelerator: "CmdOrCtrl+,",
+                click: () => sendToRenderer("menu:openSettings"),
+              },
+              { type: "separator" },
               { role: "quit" },
             ],
           },
@@ -972,13 +1025,26 @@ app.whenReady().then(() => {
       label: "File",
       submenu: [
         {
-          label: "Open Folder",
+          label: "Open Files…",
           accelerator: "CmdOrCtrl+O",
-          click: async () => {
-            await openFolderAndSend(mainWindow);
-          },
+          click: () => sendToRenderer("menu:openFiles"),
+        },
+        {
+          label: "Open Folder…",
+          accelerator: "CmdOrCtrl+Shift+O",
+          click: () => sendToRenderer("menu:openFolder"),
         },
         { type: "separator" },
+        ...(process.platform !== "darwin"
+          ? [
+              {
+                label: "Settings…",
+                accelerator: "CmdOrCtrl+,",
+                click: () => sendToRenderer("menu:openSettings"),
+              },
+              { type: "separator" },
+            ]
+          : []),
         { role: "quit" },
       ],
     },
@@ -1014,6 +1080,7 @@ app.on("will-quit", () => {
 
 app.on("window-all-closed", () => {
   stopFolderWatcher();
+  rendererAcceptsOpens = null;
   if (process.platform !== "darwin") {
     app.quit();
   }

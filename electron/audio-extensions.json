@@ -1,0 +1,21 @@
+{
+  "mp3": "audio/mpeg",
+  "wav": "audio/wav",
+  "flac": "audio/flac",
+  "m4a": "audio/mp4",
+  "aac": "audio/aac",
+  "ogg": "audio/ogg",
+  "oga": "audio/ogg",
+  "opus": "audio/opus",
+  "aiff": "audio/aiff",
+  "aif": "audio/aiff",
+  "wma": "audio/x-ms-wma",
+  "ac3": "audio/ac3",
+  "dts": "audio/vnd.dts",
+  "amr": "audio/amr",
+  "ape": "audio/x-ape",
+  "wv": "audio/x-wavpack",
+  "spx": "audio/ogg",
+  "dsf": "audio/x-dsf",
+  "dff": "audio/x-dff"
+}

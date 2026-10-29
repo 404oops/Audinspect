@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AudioPlayer from './components/AudioPlayer';
 import TitleBar from './components/TitleBar';
 import Settings from './components/Settings';
@@ -15,6 +15,12 @@ function App() {
     openSettings();
   };
 
+  // application menu / cmd+, shortcut
+  useEffect(() => {
+    const unsubscribe = window.electronAPI?.onMenuOpenSettings?.(() => openSettings());
+    return () => unsubscribe?.();
+  }, [openSettings]);
+
   const handleSettingsClose = () => {
     closeSettings();
   };
@@ -23,7 +29,7 @@ function App() {
     <div className="app-root h-screen bg-pure-black text-white flex flex-col overflow-hidden">
       <TitleBar onSettingsClick={handleSettingsClick} />
       <AudioPlayer />
-      <Settings isOpen={isSettingsOpen} onClose={handleSettingsClose} />
+      {isSettingsOpen && <Settings onClose={handleSettingsClose} />}
       {!binariesReady && (
         <BinaryDownloader
           onReady={() => setBinariesReady(true)}

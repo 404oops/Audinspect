@@ -12,8 +12,7 @@
     "package:mac_x64": "npm run build && electron-builder --mac --x64 && node scripts/clean-build.js",
     "package:mac_arm": "npm run build && electron-builder --mac --arm64 && node scripts/clean-build.js",
     "package:linux": "npm run build && electron-builder --linux --x64 && node scripts/clean-build.js",
-    "package:all": "npm run build && electron-builder -mwl && node scripts/clean-build.js",
-    "postinstall": "electron-rebuild && electron-builder install-app-deps"
+    "package:all": "npm run build && electron-builder -mwl && node scripts/clean-build.js"
   },
   "keywords": [],
   "author": "",
@@ -24,6 +23,161 @@
     "icon": "resources/icon.png",
     "publish": null,
     "asar": true,
+    "npmRebuild": false,
+    "fileAssociations": [
+      {
+        "ext": "mp3",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/mpeg",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": "wav",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/wav",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": "flac",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/flac",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": "m4a",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/mp4",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": "aac",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/aac",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": "ogg",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/ogg",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": "oga",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/ogg",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": "opus",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/opus",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": "aiff",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/aiff",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": "aif",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/aiff",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": "wma",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/x-ms-wma",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": "ac3",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/ac3",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": "dts",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/vnd.dts",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": "amr",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/amr",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": "ape",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/x-ape",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": "wv",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/x-wavpack",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": "spx",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/ogg",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": "dsf",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/x-dsf",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": "dff",
+        "name": "Audio File",
+        "description": "Audio file",
+        "mimeType": "audio/x-dff",
+        "role": "Viewer",
+        "rank": "Alternate"
+      }
+    ],
     "files": [
       "dist/*.html",
       "dist/assets/*",
@@ -139,35 +293,33 @@
     "compression": "maximum"
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.7.1",
-    "@vitejs/plugin-react": "^5.1.1",
-    "autoprefixer": "^10.4.22",
-    "concurrently": "^9.2.1",
-    "cross-env": "^7.0.3",
-    "electron": "^39.2.3",
-    "electron-builder": "^25.1.8",
-    "postcss": "^8.5.6",
+    "@vitejs/plugin-react": "^6.1.2",
+    "autoprefixer": "^10.6.2",
+    "concurrently": "^10.0.6",
+    "cross-env": "^10.1.0",
+    "electron": "^45.1.0",
+    "electron-builder": "^26.18.0",
+    "postcss": "^8.5.32",
     "tailwindcss": "^3.4.18",
     "upx": "^1.0.6",
-    "vite": "^7.2.4",
-    "wait-on": "^9.0.3"
+    "vite": "^8.3.5",
+    "wait-on": "^9.5.1"
   },
   "optionalDependencies": {
     "ffmpeg-static": "^5.3.0",
     "ffprobe-static": "^3.1.0"
   },
   "dependencies": {
-    "chokidar": "^5.0.0",
-    "classic-level": "^3.0.0",
+    "@fontsource-variable/exo-2": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "chokidar": "^6.0.0",
+    "dexie": "^4.4.7",
     "level": "^10.0.0",
-    "level-supports": "^6.0.0",
-    "level-transcoder": "^1.0.1",
-    "dexie": "^4.2.1",
-    "lucide-react": "^0.554.0",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "react-window": "^2.2.3",
-    "wavesurfer.js": "^7.0.0",
-    "zustand": "^5.0.8"
+    "lucide-react": "^1.64.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-window": "^2.5.1",
+    "wavesurfer.js": "^8.0.3",
+    "zustand": "^5.0.16"
   }
 }

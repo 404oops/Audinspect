@@ -41,7 +41,7 @@ export default function TitleBar({ onSettingsClick }) {
         </div>
         <button
           onClick={onSettingsClick}
-          className="no-drag bg-pure-black border-2 border-transparent hover:border-white text-white p-4 transition-all duration-200"
+          className="no-drag bg-pure-black border-2 border-transparent hover:border-white text-white p-4 transition-colors duration-200"
           aria-label="Settings"
           title="Settings"
         >
@@ -54,7 +54,7 @@ export default function TitleBar({ onSettingsClick }) {
           <>
             <button
               onClick={handleMinimize}
-              className="no-drag bg-pure-black border-2 border-transparent hover:border-white text-white p-4 transition-all duration-200"
+              className="no-drag bg-pure-black border-2 border-transparent hover:border-white text-white p-4 transition-colors duration-200"
               aria-label="Minimize"
               title="Minimize"
             >
@@ -62,7 +62,7 @@ export default function TitleBar({ onSettingsClick }) {
             </button>
             <button
               onClick={handleMaximize}
-              className="no-drag bg-pure-black border-2 border-transparent hover:border-white text-white p-4 transition-all duration-200"
+              className="no-drag bg-pure-black border-2 border-transparent hover:border-white text-white p-4 transition-colors duration-200"
               aria-label="Maximize"
               title="Maximize"
             >
@@ -74,7 +74,7 @@ export default function TitleBar({ onSettingsClick }) {
             </button>
             <button
               onClick={handleClose}
-              className="no-drag bg-pure-black border-2 border-transparent hover:border-[var(--accent-color)] hover:bg-[var(--accent-color)] text-white p-4 transition-all duration-200"
+              className="no-drag bg-pure-black border-2 border-transparent hover:border-[var(--accent-color)] hover:bg-[var(--accent-color)] text-white p-4 transition-colors duration-200"
               aria-label="Close"
               title="Close"
             >
