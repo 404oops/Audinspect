@@ -290,28 +290,11 @@ function onDomDrop(e) {
 }
 
 // ---------------------------------------------------------------------------
-// menubar + keyboard shortcuts (the application menu of the desktop app)
+// keyboard shortcuts (the application menu of the desktop app). no puter
+// menubar: in puter's full-page app mode the menubar strip is laid over the
+// window without shrinking the app's iframe, which cut the bottom of the
+// playlist off, and everything in that menu is already reachable in the ui.
 // ---------------------------------------------------------------------------
-function installMenubar(puter) {
-  try {
-    puter.ui.setMenubar({
-      items: [
-        {
-          label: "File",
-          items: [
-            { label: "Open Files…", action: () => events.emit("menu:openFiles") },
-            { label: "Open Folder…", action: () => events.emit("menu:openFolder") },
-            "-",
-            { label: "Settings…", action: () => events.emit("menu:openSettings") },
-          ],
-        },
-      ],
-    });
-  } catch (e) {
-    console.warn("setMenubar failed:", e);
-  }
-}
-
 function onShortcut(e) {
   const mod = e.metaKey || e.ctrlKey;
   if (!mod || e.altKey) return;
@@ -340,10 +323,6 @@ export async function initPlatform() {
   try {
     puter.ui.setWindowTitle("Audinspect");
   } catch (e) {}
-  // inside a puter window the menubar is part of the window chrome. on a
-  // plain web page puter.js would render a fallback menubar over the top of
-  // the page, covering the title strip, so the shortcuts have to do there.
-  if (puter.env === "app") installMenubar(puter);
   // on a plain web page an authenticated call would pop up the sign-in
   // dialog; only ask once the user is signed in (always true inside puter)
   if (await isSignedIn()) await learnHome(puter);

@@ -49,7 +49,7 @@ length once played.
 | Native file / folder dialogs        | `puter.ui.showOpenFilePicker` / `showDirectoryPicker`  |
 | `fs.readdir` / `fs.stat` / `fs.readFile` | `puter.fs.readdir` (recursive) / `stat` / `read` (ranged) |
 | chokidar folder watcher             | polling `readdir` while a folder is open               |
-| Application menu + accelerators     | `puter.ui.setMenubar` + in-app Ctrl/Cmd+O, Shift+O, `,` |
+| Application menu + accelerators     | in-app shortcuts: Ctrl/Cmd+O (files), Ctrl/Cmd+Shift+O (folder), Ctrl/Cmd+, (settings) |
 | OS file associations                | `puter.ui.onLaunchedWithItems` + app file type associations |
 | Drops from the file manager         | Puter's `drop` relay for desktop items; DataTransfer for outside files |
 | localStorage settings               | localStorage mirrored to `puter.kv` (follows your account) |
